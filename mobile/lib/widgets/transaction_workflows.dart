@@ -6,6 +6,7 @@ import '../services/api_errors.dart';
 import '../services/transaction_actions.dart';
 import '../services/transaction_lists.dart';
 import 'field_ui.dart';
+import 'print_document_button.dart';
 
 void showTransactionActionBlocked(BuildContext context, String message) {
   if (!context.mounted) return;
@@ -925,4 +926,109 @@ Future<Map<String, dynamic>?> confirmCreateBilling(
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyApiError(error))));
     return null;
   }
+}
+
+Future<Map<String, dynamic>> fetchGatePassDocument(
+  ApiClient api,
+  Map<String, dynamic> outslip,
+) async {
+  final ref = fieldDbId(outslip);
+  if (ref.isEmpty) throw ApiException('Outslip reference missing.');
+
+  final response = await api.request('GET', '/outslips/$ref/gate-pass');
+  final data = (response as Map)['data'];
+  if (data is! Map) throw ApiException('Gate pass not found.');
+  return Map<String, dynamic>.from(data);
+}
+
+Future<Map<String, dynamic>?> saveGatePassDetails(
+  BuildContext context,
+  ApiClient api,
+  Map<String, dynamic> outslip, {
+  required Map<String, dynamic> payload,
+  required Map<String, dynamic> currentDocument,
+  bool offline = false,
+}) async {
+  if (!canEditGatePass(currentDocument, offline: offline)) {
+    showTransactionActionBlocked(
+      context,
+      gatePassEditBlockedMessage(offline: offline),
+    );
+    return null;
+  }
+
+  final ref = fieldDbId(outslip);
+  if (ref.isEmpty) return null;
+
+  try {
+    final response = await api.put('/outslips/$ref/gate-pass', payload);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gate pass saved.')),
+      );
+    }
+    final updated = recordFromPayload(response);
+    if (updated != null) return updated;
+    final data = (response as Map)['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : null;
+  } catch (error) {
+    if (!context.mounted) return null;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyApiError(error))));
+    return null;
+  }
+}
+
+Future<Map<String, dynamic>?> markGatePassAsExited(
+  BuildContext context,
+  ApiClient api,
+  Map<String, dynamic> outslip, {
+  required Map<String, dynamic> payload,
+  required Map<String, dynamic> currentDocument,
+  bool offline = false,
+}) async {
+  if (!canMarkGatePassExited(currentDocument, offline: offline)) {
+    showTransactionActionBlocked(
+      context,
+      gatePassExitBlockedMessage(offline: offline),
+    );
+    return null;
+  }
+
+  final ref = fieldDbId(outslip);
+  if (ref.isEmpty) return null;
+
+  try {
+    await api.put('/outslips/$ref/gate-pass', payload);
+    final response = await api.post('/outslips/$ref/gate-pass/exit');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gate pass marked as exited.')),
+      );
+    }
+    final updated = recordFromPayload(response);
+    if (updated != null) return updated;
+    final data = (response as Map)['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : null;
+  } catch (error) {
+    if (!context.mounted) return null;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyApiError(error))));
+    return null;
+  }
+}
+
+Future<void> printGatePassDocument(
+  BuildContext context,
+  ApiClient api,
+  Map<String, dynamic> outslip, {
+  required Map<String, dynamic> document,
+}) async {
+  if (!canPrintGatePass(outslip)) {
+    showTransactionActionBlocked(
+      context,
+      'Gate pass is available after outslip approval.',
+    );
+    return;
+  }
+
+  await printGatePass(context, api, outslip, documentOverride: document);
 }

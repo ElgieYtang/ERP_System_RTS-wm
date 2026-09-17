@@ -73,10 +73,12 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
       });
     } catch (error) {
       final cached = await OfflineCache.loadList(OfflineCache.deliveries);
+      final lists = await TransactionLists.fromCache();
       if (!mounted) return;
       if (cached.rows.isNotEmpty) {
         setState(() {
           _rows = cached.rows;
+          _lists = lists;
           _fromCache = true;
           _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
           _error = friendlyApiError(error);
@@ -93,9 +95,7 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
 
   Future<void> _setStatus(Map<String, dynamic> row, String status) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offline')),
-      );
+      fieldShowOfflineBlocked(context);
       return;
     }
 
@@ -114,7 +114,7 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
 
   Future<void> _createBilling(Map<String, dynamic> row, {bool popCurrentRoute = false}) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     final id = fieldDbId(row);
@@ -176,7 +176,8 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
             final busy = _busyId == id;
             final showOut = canMarkDeliveryOut(row);
             final showDelivered = canMarkDeliveryDelivered(row);
-            final showBilling = canCreateBillingFromDelivery(row, _lists);
+            final showBilling =
+                _lists.crossModuleRulesReliable && canCreateBillingFromDelivery(row, _lists);
 
             return Card(
               child: InkWell(
@@ -186,6 +187,7 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
                     widget.api,
                     MobileModule.deliveries,
                     row,
+                    offline: _fromCache,
                   );
                   await _load();
                 },
@@ -259,6 +261,8 @@ class DeliveryDetailPage extends StatelessWidget {
     this.popAfterMutations = true,
     this.onSetStatus,
     this.onCreateBilling,
+    this.workflowNotice,
+    this.workflowNoticeLoading = false,
   });
 
   final ApiClient api;
@@ -266,6 +270,8 @@ class DeliveryDetailPage extends StatelessWidget {
   final bool popAfterMutations;
   final Future<void> Function(String status)? onSetStatus;
   final Future<void> Function()? onCreateBilling;
+  final String? workflowNotice;
+  final bool workflowNoticeLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -282,6 +288,8 @@ class DeliveryDetailPage extends StatelessWidget {
       title: delivery['id']?.toString() ?? 'Delivery',
       subtitle: customer,
       status: status,
+      workflowNotice: workflowNotice,
+      workflowNoticeLoading: workflowNoticeLoading,
       secondaryActions: [
         PrintDocumentButton(
           onPrint: () => printDeliveryReceipt(context, api, delivery),

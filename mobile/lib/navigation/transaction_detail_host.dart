@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../navigation/app_navigation.dart';
 import '../navigation/mobile_modules.dart';
 import '../services/api_client.dart';
 import '../services/api_errors.dart';
@@ -17,11 +16,13 @@ class TransactionDetailHost extends StatefulWidget {
     required this.api,
     required this.module,
     required this.initialRecord,
+    this.offline = false,
   });
 
   final ApiClient api;
   final MobileModule module;
   final Map<String, dynamic> initialRecord;
+  final bool offline;
 
   @override
   State<TransactionDetailHost> createState() => _TransactionDetailHostState();
@@ -29,9 +30,11 @@ class TransactionDetailHost extends StatefulWidget {
 
 class _TransactionDetailHostState extends State<TransactionDetailHost> {
   late Map<String, dynamic> _record;
-  TransactionLists _lists = const TransactionLists();
+  TransactionLists _lists = const TransactionLists(crossModuleRulesReliable: false);
   bool _loadingLists = true;
   bool _busy = false;
+
+  bool get _listsReady => !_loadingLists;
 
   @override
   void initState() {
@@ -50,11 +53,23 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
         _loadingLists = false;
       });
     } catch (error) {
+      final lists = await TransactionLists.fromCache();
       if (!mounted) return;
-      setState(() => _loadingLists = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyApiError(error))),
-      );
+      setState(() {
+        _lists = lists;
+        _loadingLists = false;
+      });
+      if (!lists.crossModuleRulesReliable && !widget.offline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Offline — some workflow actions may be hidden until you reconnect.'),
+          ),
+        );
+      } else if (lists.crossModuleRulesReliable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyApiError(error))),
+        );
+      }
     }
   }
 
@@ -68,6 +83,7 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
             api: widget.api,
             module: module,
             initialRecord: record,
+            offline: widget.offline,
           ),
         ),
       ),
@@ -92,21 +108,27 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingLists) {
-      return Scaffold(
-        appBar: transactionAppBar(context, title: _titleForRecord(), showBack: true),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
     return buildTransactionDetailPage(
       api: widget.api,
       module: widget.module,
       record: _record,
       popAfterMutations: false,
-      canReceive: widget.module == MobileModule.purchaseOrders &&
+      offline: widget.offline,
+      workflowNotice: _loadingLists
+          ? 'Loading workflow actions…'
+          : widget.offline
+              ? 'Offline — reconnect to update this record.'
+              : null,
+      workflowNoticeLoading: _loadingLists,
+      canReceive: !widget.offline &&
+          _listsReady &&
+          _lists.crossModuleRulesReliable &&
+          widget.module == MobileModule.purchaseOrders &&
           canReceivePurchaseOrder(_record, _lists),
-      onReceive: widget.module == MobileModule.purchaseOrders &&
+      onReceive: !widget.offline &&
+              _listsReady &&
+              _lists.crossModuleRulesReliable &&
+              widget.module == MobileModule.purchaseOrders &&
               canReceivePurchaseOrder(_record, _lists)
           ? () => _run(() async {
                 final next = await receivePurchaseOrder(
@@ -118,14 +140,18 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
                 if (next != null) await _handoff(MobileModule.receiving, next);
               })
           : null,
-      onConfirm: widget.module == MobileModule.receiving && canConfirmReceiving(_record)
+      onConfirm: !widget.offline &&
+              widget.module == MobileModule.receiving &&
+              canConfirmReceiving(_record)
           ? () => _run(() async {
                 final updated = await confirmReceiving(context, widget.api, _record);
                 if (updated != null) await _refreshRecord(updated);
               })
           : null,
-      onCreateOutslip: widget.module == MobileModule.receiving &&
-              canCreateOutslipFromReceiving(_record, _lists)
+      onCreateOutslip: !widget.offline &&
+              _listsReady &&
+              widget.module == MobileModule.receiving &&
+              canCreateOutslipFromReceivingSafe(_record, _lists)
           ? () => _run(() async {
                 final next = await createOutslipFromReceiving(
                   context,
@@ -135,19 +161,35 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
                 if (next != null) await _handoff(MobileModule.outslips, next);
               })
           : null,
-      onApprove: widget.module == MobileModule.outslips && canApproveOutslip(_record)
+      onViewOutslip: _listsReady &&
+              widget.module == MobileModule.receiving &&
+              _lists.crossModuleRulesReliable &&
+              findOutslipForReceiving(_record, _lists) != null
+          ? () => _run(() async {
+                final outslip = findOutslipForReceiving(_record, _lists);
+                if (outslip != null) await _handoff(MobileModule.outslips, outslip);
+              })
+          : null,
+      onApprove: !widget.offline &&
+              widget.module == MobileModule.outslips &&
+              canApproveOutslip(_record)
           ? () => _run(() async {
                 final updated = await approveOutslip(context, widget.api, _record);
                 if (updated != null) await _refreshRecord(updated);
               })
           : null,
-      onDispatch: widget.module == MobileModule.outslips && canDispatchOutslip(_record)
+      onDispatch: !widget.offline &&
+              widget.module == MobileModule.outslips &&
+              canDispatchOutslip(_record)
           ? () => _run(() async {
                 final updated = await dispatchOutslip(context, widget.api, _record);
                 if (updated != null) await _refreshRecord(updated);
               })
           : null,
-      onCreateDr: widget.module == MobileModule.outslips &&
+      onCreateDr: !widget.offline &&
+              _listsReady &&
+              widget.module == MobileModule.outslips &&
+              _lists.crossModuleRulesReliable &&
               canCreateDrFromOutslip(_record, _lists)
           ? () => _run(() async {
                 final next = await confirmCreateDeliveryReceipt(
@@ -158,7 +200,8 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
                 if (next != null) await _handoff(MobileModule.deliveries, next);
               })
           : null,
-      onSetStatus: widget.module == MobileModule.deliveries &&
+      onSetStatus: !widget.offline &&
+              widget.module == MobileModule.deliveries &&
               (canMarkDeliveryOut(_record) || canMarkDeliveryDelivered(_record))
           ? (status) => _run(() async {
                 final updated = await updateDeliveryStatus(
@@ -170,14 +213,18 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
                 if (updated != null) await _refreshRecord(updated);
               })
           : null,
-      onCreateBilling: widget.module == MobileModule.deliveries &&
+      onCreateBilling: !widget.offline &&
+              _listsReady &&
+              _lists.crossModuleRulesReliable &&
+              widget.module == MobileModule.deliveries &&
               canCreateBillingFromDelivery(_record, _lists)
           ? () => _run(() async {
                 final next = await confirmCreateBilling(context, widget.api, _record);
                 if (next != null) await _handoff(MobileModule.billing, next);
               })
           : null,
-      onRecordPayment: widget.module == MobileModule.billing &&
+      onRecordPayment: !widget.offline &&
+              widget.module == MobileModule.billing &&
               canRecordBillingPayment(_record)
           ? () => _run(() async {
                 final updated = await recordBillingPayment(
@@ -188,28 +235,39 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
                 if (updated != null) await _refreshRecord(updated);
               })
           : null,
-      onApproveQuotation: widget.module == MobileModule.quotations &&
+      onApproveQuotation: !widget.offline &&
+              widget.module == MobileModule.quotations &&
               canApproveQuotation(_record)
           ? () => _run(() async {
                 final updated = await approveQuotation(context, widget.api, _record);
                 if (updated != null) await _refreshRecord(updated);
               })
           : null,
-      onConvert: widget.module == MobileModule.quotations &&
+      onConvert: !widget.offline &&
+              _listsReady &&
+              _lists.crossModuleRulesReliable &&
+              widget.module == MobileModule.quotations &&
               canConvertQuotation(_record, _lists)
           ? () => _run(() async {
                 final next = await convertQuotationToPo(context, widget.api, _record);
                 if (next != null) await _handoff(MobileModule.purchaseOrders, next);
               })
           : null,
-      onCancel: widget.module == MobileModule.quotations &&
+      onCancel: !widget.offline &&
+              _listsReady &&
+              _lists.crossModuleRulesReliable &&
+              widget.module == MobileModule.quotations &&
               canCancelQuotation(_record, _lists)
           ? () => _run(() async {
                 final updated = await cancelQuotation(context, widget.api, _record);
                 if (updated != null) await _refreshRecord(updated);
               })
           : null,
-      onEdit: widget.module == MobileModule.quotations && canEditQuotation(_record, _lists)
+      onEdit: !widget.offline &&
+              _listsReady &&
+              _lists.crossModuleRulesReliable &&
+              widget.module == MobileModule.quotations &&
+              canEditQuotation(_record, _lists)
           ? () => _run(() async {
                 final updated = await editQuotation(context, widget.api, _record);
                 if (updated != null) await _refreshRecord(updated);
@@ -217,18 +275,15 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
           : null,
     );
   }
-
-  String _titleForRecord() {
-    return _record['id']?.toString() ?? mobileModuleTitle(widget.module);
-  }
 }
 
 Future<void> pushTransactionDetail(
   BuildContext context,
   ApiClient api,
   MobileModule module,
-  Map<String, dynamic> record,
-) {
+  Map<String, dynamic> record, {
+  bool offline = false,
+}) {
   return Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => wrapModuleNavigationScope(
@@ -237,6 +292,7 @@ Future<void> pushTransactionDetail(
           api: api,
           module: module,
           initialRecord: record,
+          offline: offline,
         ),
       ),
     ),

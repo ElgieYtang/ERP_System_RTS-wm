@@ -330,25 +330,22 @@ class DocumentPrint {
     Map<String, dynamic>? document = documentOverride;
 
     if (document == null && outslipRef.isNotEmpty) {
-      try {
-        final response = await api.request('GET', '/outslips/$outslipRef/gate-pass');
-        if (response is Map && response['data'] is Map) {
-          document = Map<String, dynamic>.from(response['data'] as Map);
-        }
-      } catch (_) {
-        document = null;
+      final response = await api.request('GET', '/outslips/$outslipRef/gate-pass');
+      if (response is Map && response['data'] is Map) {
+        document = Map<String, dynamic>.from(response['data'] as Map);
       }
     }
 
-    final Map<String, dynamic> doc = document ??
-        {
-          'gatePassNo': 'GP-${detail['id']?.toString().replaceAll(RegExp(r'^OS-'), '') ?? '—'}',
-          'outslipNo': detail['id']?.toString(),
-          'customerName': detail['customerName']?.toString(),
-          'displayDate': detail['displayDate']?.toString() ?? detail['date']?.toString(),
-          'purpose': 'Delivery of items per Outslip',
-          'items': _itemsFromRow(detail),
-        };
+    if (document == null) {
+      throw ApiException('Could not load gate pass data. Check your connection and try again.');
+    }
+
+    final Map<String, dynamic> doc = documentOverride != null
+        ? {
+            ...document,
+            ...documentOverride,
+          }
+        : document;
 
     String dash(String? value) {
       final text = value?.trim();
@@ -435,7 +432,7 @@ class DocumentPrint {
             authorizedBy: doc['authorizedByName']?.toString() ?? 'Admin',
           ),
         ]);
-    await _presentPdf(bytes, gatePassNo);
+    await Printing.sharePdf(bytes: bytes, filename: '$gatePassNo.pdf');
   }
 
   static Future<void> shareOutslip(Map<String, dynamic> outslip) async {
@@ -681,14 +678,5 @@ class DocumentPrint {
     } catch (_) {}
 
     return outslip;
-  }
-
-  static Future<void> _presentPdf(Uint8List bytes, String name) async {
-    final filename = name.replaceAll('/', '-');
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: filename,
-      format: DocumentPdfLayout.pageFormat,
-    );
   }
 }

@@ -46,8 +46,12 @@ class _OutslipsPageState extends State<OutslipsPage> {
         return _rows
             .where((r) => r['status'] == 'pending' || r['status'] == 'approved')
             .toList();
-      case 'ready':
+      case 'dispatch':
         return _rows.where((r) => r['status'] == 'for_dispatch').toList();
+      case 'dr_ready':
+        return _rows
+            .where((r) => _lists.crossModuleRulesReliable && canCreateDrFromOutslip(r, _lists))
+            .toList();
       default:
         return _rows;
     }
@@ -76,10 +80,12 @@ class _OutslipsPageState extends State<OutslipsPage> {
       });
     } catch (error) {
       final cached = await OfflineCache.loadList(OfflineCache.outslips);
+      final lists = await TransactionLists.fromCache();
       if (!mounted) return;
       if (cached.rows.isNotEmpty) {
         setState(() {
           _rows = cached.rows;
+          _lists = lists;
           _fromCache = true;
           _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
           _error = friendlyApiError(error);
@@ -96,9 +102,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
 
   Future<void> _approve(Map<String, dynamic> row) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offline')),
-      );
+      fieldShowOfflineBlocked(context);
       return;
     }
 
@@ -117,9 +121,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
 
   Future<void> _dispatch(Map<String, dynamic> row) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offline')),
-      );
+      fieldShowOfflineBlocked(context);
       return;
     }
 
@@ -138,7 +140,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
 
   Future<void> _createDeliveryReceipt(Map<String, dynamic> row, {bool popCurrentRoute = false}) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     final id = fieldDbId(row);
@@ -165,7 +167,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
 
   Future<void> _openCreate() async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     if (_creating) return;
@@ -211,7 +213,8 @@ class _OutslipsPageState extends State<OutslipsPage> {
             value: _filter,
             options: const [
               (id: 'action', label: 'Needs action'),
-              (id: 'ready', label: 'For dispatch'),
+              (id: 'dispatch', label: 'For dispatch'),
+              (id: 'dr_ready', label: 'Ready for DR'),
               (id: 'all', label: 'All'),
             ],
             onChanged: (value) => setState(() => _filter = value),
@@ -221,7 +224,11 @@ class _OutslipsPageState extends State<OutslipsPage> {
           if (visible.isEmpty && (_error == null || _fromCache))
             FieldEmptyState(
               icon: Icons.outbox_outlined,
-              title: _filter == 'action' ? 'No outslips needing action' : 'No outslips',
+              title: _filter == 'action'
+                  ? 'No outslips needing action'
+                  : _filter == 'dr_ready'
+                      ? 'No outslips ready for DR'
+                      : 'No outslips',
             ),
           ...visible.map((row) {
             final id = row['dbId']?.toString() ?? row['id']?.toString() ?? '';
@@ -230,7 +237,8 @@ class _OutslipsPageState extends State<OutslipsPage> {
             final busy = _busyId == id;
             final showApprove = canApproveOutslip(row);
             final showDispatch = canDispatchOutslip(row);
-            final showCreateDr = canCreateDrFromOutslip(row, _lists);
+            final showCreateDr =
+                _lists.crossModuleRulesReliable && canCreateDrFromOutslip(row, _lists);
 
             return Card(
               child: InkWell(
@@ -240,6 +248,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
                     widget.api,
                     MobileModule.outslips,
                     row,
+                    offline: _fromCache,
                   );
                   await _load();
                 },
@@ -308,18 +317,24 @@ class OutslipDetailPage extends StatelessWidget {
     super.key,
     required this.api,
     required this.outslip,
+    this.offline = false,
     this.popAfterMutations = true,
     this.onApprove,
     this.onDispatch,
     this.onCreateDr,
+    this.workflowNotice,
+    this.workflowNoticeLoading = false,
   });
 
   final ApiClient api;
   final Map<String, dynamic> outslip;
+  final bool offline;
   final bool popAfterMutations;
   final Future<void> Function()? onApprove;
   final Future<void> Function()? onDispatch;
   final Future<void> Function()? onCreateDr;
+  final String? workflowNotice;
+  final bool workflowNoticeLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -336,6 +351,8 @@ class OutslipDetailPage extends StatelessWidget {
       title: outslip['id']?.toString() ?? 'Outslip',
       subtitle: customer,
       status: status,
+      workflowNotice: workflowNotice,
+      workflowNoticeLoading: workflowNoticeLoading,
       secondaryActions: [
         if (canPrintGatePass(outslip))
           OutlinedButton.icon(
@@ -343,7 +360,11 @@ class OutslipDetailPage extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => GatePassPage(api: api, outslip: outslip),
+                  builder: (context) => GatePassPage(
+                    api: api,
+                    outslip: outslip,
+                    offline: offline,
+                  ),
                 ),
               );
             },

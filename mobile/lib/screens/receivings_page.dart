@@ -72,10 +72,12 @@ class _ReceivingsPageState extends State<ReceivingsPage> {
       });
     } catch (error) {
       final cached = await OfflineCache.loadList(OfflineCache.receivings);
+      final lists = await TransactionLists.fromCache();
       if (!mounted) return;
       if (cached.rows.isNotEmpty) {
         setState(() {
           _rows = cached.rows;
+          _lists = lists;
           _fromCache = true;
           _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
           _error = friendlyApiError(error);
@@ -92,9 +94,7 @@ class _ReceivingsPageState extends State<ReceivingsPage> {
 
   Future<void> _confirm(Map<String, dynamic> row) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offline')),
-      );
+      fieldShowOfflineBlocked(context);
       return;
     }
 
@@ -113,10 +113,10 @@ class _ReceivingsPageState extends State<ReceivingsPage> {
 
   Future<void> _createOutslip(Map<String, dynamic> row, {bool popCurrentRoute = false}) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
-    if (!canCreateOutslipFromReceiving(row, _lists)) return;
+    if (!canCreateOutslipFromReceivingSafe(row, _lists)) return;
 
     final created = await createOutslipFromReceiving(context, widget.api, row);
     if (created != null) {
@@ -130,6 +130,17 @@ class _ReceivingsPageState extends State<ReceivingsPage> {
         popCurrentRoute: popCurrentRoute,
       );
     }
+  }
+
+  Future<void> _viewOutslip(Map<String, dynamic> outslip) async {
+    await pushTransactionDetail(
+      context,
+      widget.api,
+      MobileModule.outslips,
+      outslip,
+      offline: _fromCache,
+    );
+    await _load();
   }
 
   @override
@@ -166,39 +177,73 @@ class _ReceivingsPageState extends State<ReceivingsPage> {
             final id = row['dbId']?.toString() ?? row['id']?.toString() ?? '';
             final status = row['status']?.toString() ?? '';
             final pending = canConfirmReceiving(row);
-            final canCreateOutslip = canCreateOutslipFromReceiving(row, _lists);
+            final canCreateOutslip = canCreateOutslipFromReceivingSafe(row, _lists);
+            final existingOutslip = findOutslipForReceiving(row, _lists);
             final itemCount = (row['items'] as List<dynamic>? ?? const []).length;
             final busy = _busyId == id;
 
             return Card(
-              child: ListTile(
-                title: Text(row['id']?.toString() ?? 'Receiving'),
-                subtitle: Text(
-                  '${row['supplierName']?.toString().isNotEmpty == true ? row['supplierName'] : '—'} · '
-                  '${row['displayDate'] ?? row['date'] ?? '—'}\n'
-                  'PO: ${row['purchaseOrderId'] ?? '—'} · $itemCount item(s)',
-                ),
-                isThreeLine: true,
-                trailing: pending
-                    ? FilledButton(
-                        onPressed: busy || _fromCache ? null : () => _confirm(row),
-                        child: Text(busy ? '…' : 'Confirm'),
-                      )
-                    : canCreateOutslip
-                        ? FilledButton.tonal(
-                            onPressed: _fromCache ? null : () => _createOutslip(row),
-                            child: const Text('Create outslip'),
-                          )
-                        : FieldStatusChip(status),
+              child: InkWell(
                 onTap: () async {
                   await pushTransactionDetail(
                     context,
                     widget.api,
                     MobileModule.receiving,
                     row,
+                    offline: _fromCache,
                   );
                   await _load();
                 },
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              row['id']?.toString() ?? 'Receiving',
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                            ),
+                          ),
+                          if (!pending && !canCreateOutslip && existingOutslip == null)
+                            FieldStatusChip(status),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${row['supplierName']?.toString().isNotEmpty == true ? row['supplierName'] : '—'} · '
+                        '${row['displayDate'] ?? row['date'] ?? '—'}',
+                      ),
+                      Text('PO: ${row['purchaseOrderId'] ?? '—'} · $itemCount item(s)'),
+                      if (pending || canCreateOutslip || existingOutslip != null) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (pending)
+                              FilledButton(
+                                onPressed: busy || _fromCache ? null : () => _confirm(row),
+                                child: Text(busy ? '…' : 'Confirm'),
+                              )
+                            else if (canCreateOutslip)
+                              FilledButton.tonal(
+                                onPressed: _fromCache ? null : () => _createOutslip(row),
+                                child: const Text('Create outslip'),
+                              )
+                            else if (existingOutslip != null && _lists.crossModuleRulesReliable)
+                              OutlinedButton(
+                                onPressed: () => _viewOutslip(existingOutslip),
+                                child: const Text('View outslip'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             );
           }),
@@ -216,6 +261,9 @@ class ReceivingDetailPage extends StatelessWidget {
     this.popAfterMutations = true,
     this.onConfirm,
     this.onCreateOutslip,
+    this.onViewOutslip,
+    this.workflowNotice,
+    this.workflowNoticeLoading = false,
   });
 
   final String receivingId;
@@ -223,6 +271,9 @@ class ReceivingDetailPage extends StatelessWidget {
   final bool popAfterMutations;
   final Future<void> Function()? onConfirm;
   final Future<void> Function()? onCreateOutslip;
+  final Future<void> Function()? onViewOutslip;
+  final String? workflowNotice;
+  final bool workflowNoticeLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -230,7 +281,9 @@ class ReceivingDetailPage extends StatelessWidget {
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
-    final pending = initial['status']?.toString() != 'completed';
+    final pending = canConfirmReceiving(initial);
+    final completed = initial['status']?.toString() == 'completed';
+    final missingCustomer = completed && !receivingHasQuotationCustomer(initial);
     final supplier = initial['supplierName']?.toString().isNotEmpty == true
         ? initial['supplierName'].toString()
         : 'Supplier —';
@@ -239,6 +292,8 @@ class ReceivingDetailPage extends StatelessWidget {
       title: initial['id']?.toString() ?? 'Receiving',
       subtitle: supplier,
       status: initial['status']?.toString(),
+      workflowNotice: workflowNotice,
+      workflowNoticeLoading: workflowNoticeLoading,
       primaryActions: [
         if (pending && onConfirm != null)
           FilledButton(
@@ -252,6 +307,16 @@ class ReceivingDetailPage extends StatelessWidget {
           FilledButton.tonal(
             onPressed: () async => onCreateOutslip!(),
             child: const Text('Create outslip'),
+          ),
+        if (!pending && onViewOutslip != null)
+          OutlinedButton(
+            onPressed: () async => onViewOutslip!(),
+            child: const Text('View outslip'),
+          ),
+        if (missingCustomer)
+          const Text(
+            'Outslip requires a quotation customer on this receiving.',
+            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
           ),
       ],
       secondaryActions: [

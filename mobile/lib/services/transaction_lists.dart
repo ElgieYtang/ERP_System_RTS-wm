@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'offline_cache.dart';
 
 class TransactionLists {
   const TransactionLists({
@@ -7,6 +8,7 @@ class TransactionLists {
     this.outslips = const [],
     this.deliveryReceipts = const [],
     this.billings = const [],
+    this.crossModuleRulesReliable = true,
   });
 
   final List<Map<String, dynamic>> purchaseOrders;
@@ -14,6 +16,9 @@ class TransactionLists {
   final List<Map<String, dynamic>> outslips;
   final List<Map<String, dynamic>> deliveryReceipts;
   final List<Map<String, dynamic>> billings;
+
+  /// False when built from stale/partial offline cache — hide cross-module workflow buttons.
+  final bool crossModuleRulesReliable;
 
   static Future<TransactionLists> load(ApiClient api) async {
     final results = await Future.wait([
@@ -30,6 +35,27 @@ class TransactionLists {
       outslips: results[2].cast<Map<String, dynamic>>(),
       deliveryReceipts: results[3].cast<Map<String, dynamic>>(),
       billings: results[4].cast<Map<String, dynamic>>(),
+    );
+  }
+
+  static Future<TransactionLists> fromCache() async {
+    final results = await Future.wait([
+      OfflineCache.loadList(OfflineCache.purchaseOrders),
+      OfflineCache.loadList(OfflineCache.receivings),
+      OfflineCache.loadList(OfflineCache.outslips),
+      OfflineCache.loadList(OfflineCache.deliveries),
+      OfflineCache.loadList(OfflineCache.billings),
+    ]);
+
+    final reliable = results.every((entry) => entry.savedAt != null);
+
+    return TransactionLists(
+      purchaseOrders: results[0].rows,
+      receivings: results[1].rows,
+      outslips: results[2].rows,
+      deliveryReceipts: results[3].rows,
+      billings: results[4].rows,
+      crossModuleRulesReliable: reliable,
     );
   }
 }

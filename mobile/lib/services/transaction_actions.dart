@@ -89,6 +89,19 @@ bool hasOutslipForReceiving(Map<String, dynamic> receiving, TransactionLists lis
   return lists.outslips.any((row) => _idsMatch(row['receivingId'], rcvDb));
 }
 
+Map<String, dynamic>? findOutslipForReceiving(
+  Map<String, dynamic> receiving,
+  TransactionLists lists,
+) {
+  final rcvDb = fieldDbId(receiving);
+  for (final row in lists.outslips) {
+    if (_idsMatch(row['receivingId'], rcvDb)) {
+      return row;
+    }
+  }
+  return null;
+}
+
 bool receivingHasQuotationCustomer(Map<String, dynamic> receiving) {
   final id = receiving['customerId']?.toString();
   return id != null && id.isNotEmpty;
@@ -102,6 +115,12 @@ bool canCreateOutslipFromReceiving(
     receivingHasQuotationCustomer(receiving) &&
     !hasOutslipForReceiving(receiving, lists);
 
+bool canCreateOutslipFromReceivingSafe(
+  Map<String, dynamic> receiving,
+  TransactionLists lists,
+) =>
+    lists.crossModuleRulesReliable && canCreateOutslipFromReceiving(receiving, lists);
+
 bool canApproveOutslip(Map<String, dynamic> row) => row['status']?.toString() == 'pending';
 
 bool canDispatchOutslip(Map<String, dynamic> row) => row['status']?.toString() == 'approved';
@@ -110,6 +129,47 @@ bool canPrintGatePass(Map<String, dynamic> row) {
   final status = row['status']?.toString() ?? '';
   return status == 'approved' || status == 'for_dispatch' || status == 'released';
 }
+
+bool isGatePassExited(Map<String, dynamic> document) =>
+    (document['status']?.toString() ?? '').toLowerCase() == 'exited';
+
+bool canEditGatePass(Map<String, dynamic> document, {bool offline = false}) =>
+    !offline && !isGatePassExited(document);
+
+bool canMarkGatePassExited(Map<String, dynamic> document, {bool offline = false}) =>
+    !offline && !isGatePassExited(document);
+
+Map<String, dynamic> buildGatePassPayload({
+  required String destination,
+  required String driverName,
+  required String plateNo,
+  required String vehicleNo,
+  required String remarks,
+}) =>
+    {
+      'destination': destination.trim(),
+      'driverName': driverName.trim(),
+      'plateNo': plateNo.trim(),
+      'vehicleNo': vehicleNo.trim(),
+      'remarks': remarks.trim(),
+    };
+
+Map<String, dynamic> mergeGatePassDocument(
+  Map<String, dynamic> document,
+  Map<String, dynamic> payload,
+) =>
+    {
+      ...document,
+      ...payload,
+    };
+
+String gatePassEditBlockedMessage({bool offline = false}) => offline
+    ? 'Offline — reconnect to save gate pass details.'
+    : 'This gate pass can no longer be edited.';
+
+String gatePassExitBlockedMessage({bool offline = false}) => offline
+    ? 'Offline — reconnect to mark this gate pass as exited.'
+    : 'This gate pass has already been marked as exited.';
 
 bool isOutslipReadyForDr(String? status) {
   final value = (status ?? '').toLowerCase();

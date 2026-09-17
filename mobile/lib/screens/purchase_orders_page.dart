@@ -67,10 +67,12 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       });
     } catch (error) {
       final cached = await OfflineCache.loadList(OfflineCache.purchaseOrders);
+      final lists = await TransactionLists.fromCache();
       if (!mounted) return;
       if (cached.rows.isNotEmpty) {
         setState(() {
           _rows = cached.rows;
+          _lists = lists;
           _fromCache = true;
           _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
           _error = friendlyApiError(error);
@@ -87,7 +89,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   Future<void> _receiveItems(Map<String, dynamic> row, {bool popCurrentRoute = false}) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     final id = fieldDbId(row);
@@ -191,7 +193,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           ...visible.map((row) {
             final id = fieldDbId(row);
             final busy = _busyId == id;
-            final canReceive = canReceivePurchaseOrder(row, _lists);
+            final canReceive = _lists.crossModuleRulesReliable && canReceivePurchaseOrder(row, _lists);
 
             return Card(
               child: InkWell(
@@ -200,6 +202,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                   widget.api,
                   MobileModule.purchaseOrders,
                   row,
+                  offline: _fromCache,
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -250,12 +253,16 @@ class PurchaseOrderDetailPage extends StatelessWidget {
     required this.order,
     required this.canReceive,
     this.onReceive,
+    this.workflowNotice,
+    this.workflowNoticeLoading = false,
   });
 
   final ApiClient api;
   final Map<String, dynamic> order;
   final bool canReceive;
   final Future<void> Function()? onReceive;
+  final String? workflowNotice;
+  final bool workflowNoticeLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -268,6 +275,8 @@ class PurchaseOrderDetailPage extends StatelessWidget {
       title: order['id']?.toString() ?? 'Purchase order',
       subtitle: order['supplierName']?.toString() ?? 'Supplier —',
       status: order['status']?.toString(),
+      workflowNotice: workflowNotice,
+      workflowNoticeLoading: workflowNoticeLoading,
       secondaryActions: [
         PrintDocumentButton(
           onPrint: () => printPurchaseOrder(context, api, order),

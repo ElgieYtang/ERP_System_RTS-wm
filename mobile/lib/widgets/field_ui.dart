@@ -51,6 +51,8 @@ String fieldStatusVariant(String? status) {
     case 'for_dispatch':
     case 'active':
       return 'current';
+    case 'exited':
+      return 'approved';
     default:
       return 'draft';
   }
@@ -160,6 +162,7 @@ class FieldOfflineBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         dense: true,
+        minVerticalPadding: 12,
         leading: const Icon(Icons.cloud_off_outlined, color: AppTheme.warningText),
         title: Text(
           label,
@@ -168,6 +171,13 @@ class FieldOfflineBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+void fieldShowOfflineBlocked(BuildContext context) {
+  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Offline — reconnect to update records.')),
+  );
 }
 
 class FieldFilterBar extends StatelessWidget {
@@ -423,6 +433,8 @@ class FieldDetailScaffold extends StatelessWidget {
     this.secondaryActions,
     this.primaryActions,
     this.actions,
+    this.workflowNotice,
+    this.workflowNoticeLoading = false,
   });
 
   final String title;
@@ -432,6 +444,8 @@ class FieldDetailScaffold extends StatelessWidget {
   final List<Widget>? secondaryActions;
   final List<Widget>? primaryActions;
   final List<Widget>? actions;
+  final String? workflowNotice;
+  final bool workflowNoticeLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -475,6 +489,26 @@ class FieldDetailScaffold extends StatelessWidget {
               ),
             ),
           ),
+          if (workflowNotice != null) ...[
+            const SizedBox(height: 12),
+            Card(
+              color: AppTheme.maroonLight,
+              child: ListTile(
+                dense: true,
+                leading: workflowNoticeLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.maroon),
+                      )
+                    : const Icon(Icons.info_outline_rounded, color: AppTheme.maroon),
+                title: Text(
+                  workflowNotice!,
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary, height: 1.35),
+                ),
+              ),
+            ),
+          ],
           if (hasActions) ...[
             const SizedBox(height: 12),
             Card(

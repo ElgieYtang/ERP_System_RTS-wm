@@ -77,7 +77,7 @@ class _BillingPageState extends State<BillingPage> {
 
   Future<void> _recordPayment(Map<String, dynamic> row) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     final id = fieldRowId(row);
@@ -143,6 +143,7 @@ class _BillingPageState extends State<BillingPage> {
                   widget.api,
                   MobileModule.billing,
                   row,
+                  offline: _fromCache,
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -192,11 +193,15 @@ class BillingDetailPage extends StatelessWidget {
     required this.billing,
     this.popAfterMutations = true,
     this.onRecordPayment,
+    this.workflowNotice,
+    this.workflowNoticeLoading = false,
   });
 
   final Map<String, dynamic> billing;
   final bool popAfterMutations;
   final Future<void> Function()? onRecordPayment;
+  final String? workflowNotice;
+  final bool workflowNoticeLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -209,6 +214,8 @@ class BillingDetailPage extends StatelessWidget {
       title: billing['id']?.toString() ?? 'Billing',
       subtitle: billing['customerName']?.toString() ?? 'Customer —',
       status: billing['paymentStatus']?.toString(),
+      workflowNotice: workflowNotice,
+      workflowNoticeLoading: workflowNoticeLoading,
       secondaryActions: [
         PrintDocumentButton(
           onPrint: () => printBilling(billing),

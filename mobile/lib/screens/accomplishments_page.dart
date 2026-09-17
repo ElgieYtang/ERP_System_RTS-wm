@@ -81,9 +81,7 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
   Future<void> _createReport() async {
     if (_creating) return;
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offline')),
-      );
+      fieldShowOfflineBlocked(context);
       return;
     }
     if (_projects.isEmpty) {
@@ -179,7 +177,7 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
 
   Future<void> _approve(Map<String, dynamic> row) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     final id = row['dbId']?.toString() ?? row['id']?.toString();

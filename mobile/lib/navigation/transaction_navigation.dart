@@ -38,10 +38,12 @@ Widget buildTransactionDetailPage({
   required MobileModule module,
   required Map<String, dynamic> record,
   bool popAfterMutations = true,
+  bool offline = false,
   bool canReceive = false,
   Future<void> Function()? onReceive,
   Future<void> Function()? onConfirm,
   Future<void> Function()? onCreateOutslip,
+  Future<void> Function()? onViewOutslip,
   Future<void> Function()? onApprove,
   Future<void> Function()? onDispatch,
   Future<void> Function()? onCreateDr,
@@ -52,6 +54,8 @@ Widget buildTransactionDetailPage({
   Future<void> Function()? onConvert,
   Future<void> Function()? onCancel,
   Future<void> Function()? onEdit,
+  String? workflowNotice,
+  bool workflowNoticeLoading = false,
 }) {
   switch (module) {
     case MobileModule.purchaseOrders:
@@ -60,6 +64,8 @@ Widget buildTransactionDetailPage({
         order: record,
         canReceive: canReceive,
         onReceive: onReceive,
+        workflowNotice: workflowNotice,
+        workflowNoticeLoading: workflowNoticeLoading,
       );
     case MobileModule.receiving:
       return ReceivingDetailPage(
@@ -68,15 +74,21 @@ Widget buildTransactionDetailPage({
         popAfterMutations: popAfterMutations,
         onConfirm: onConfirm,
         onCreateOutslip: onCreateOutslip,
+        onViewOutslip: onViewOutslip,
+        workflowNotice: workflowNotice,
+        workflowNoticeLoading: workflowNoticeLoading,
       );
     case MobileModule.outslips:
       return OutslipDetailPage(
         api: api,
         outslip: record,
+        offline: offline,
         popAfterMutations: popAfterMutations,
         onApprove: onApprove,
         onDispatch: onDispatch,
         onCreateDr: onCreateDr,
+        workflowNotice: workflowNotice,
+        workflowNoticeLoading: workflowNoticeLoading,
       );
     case MobileModule.deliveries:
       return DeliveryDetailPage(
@@ -85,12 +97,16 @@ Widget buildTransactionDetailPage({
         popAfterMutations: popAfterMutations,
         onSetStatus: onSetStatus,
         onCreateBilling: onCreateBilling,
+        workflowNotice: workflowNotice,
+        workflowNoticeLoading: workflowNoticeLoading,
       );
     case MobileModule.billing:
       return BillingDetailPage(
         billing: record,
         popAfterMutations: popAfterMutations,
         onRecordPayment: onRecordPayment,
+        workflowNotice: workflowNotice,
+        workflowNoticeLoading: workflowNoticeLoading,
       );
     case MobileModule.quotations:
       return QuotationDetailPage(
@@ -101,6 +117,8 @@ Widget buildTransactionDetailPage({
         onConvert: onConvert,
         onCancel: onCancel,
         onEdit: onEdit,
+        workflowNotice: workflowNotice,
+        workflowNoticeLoading: workflowNoticeLoading,
       );
     default:
       return Scaffold(

@@ -27,6 +27,7 @@ PreferredSizeWidget transactionAppBar(
   required String title,
   List<Widget>? extraActions,
   bool showBack = false,
+  PreferredSizeWidget? bottom,
 }) {
   return AppBar(
     automaticallyImplyLeading: false,
@@ -41,5 +42,6 @@ PreferredSizeWidget transactionAppBar(
       homeAppBarButton(context),
       const SizedBox(width: 4),
     ],
+    bottom: bottom,
   );
 }

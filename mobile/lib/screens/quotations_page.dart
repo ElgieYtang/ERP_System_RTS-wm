@@ -69,10 +69,12 @@ class _QuotationsPageState extends State<QuotationsPage> {
       });
     } catch (error) {
       final cached = await OfflineCache.loadList(OfflineCache.quotations);
+      final lists = await TransactionLists.fromCache();
       if (!mounted) return;
       if (cached.rows.isNotEmpty) {
         setState(() {
           _rows = cached.rows;
+          _lists = lists;
           _fromCache = true;
           _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
           _error = friendlyApiError(error);
@@ -89,7 +91,7 @@ class _QuotationsPageState extends State<QuotationsPage> {
 
   Future<void> _approve(Map<String, dynamic> row) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     final id = fieldRowId(row);
@@ -107,7 +109,7 @@ class _QuotationsPageState extends State<QuotationsPage> {
 
   Future<void> _cancel(Map<String, dynamic> row) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     final id = fieldRowId(row);
@@ -125,7 +127,7 @@ class _QuotationsPageState extends State<QuotationsPage> {
 
   Future<void> _convertToPo(Map<String, dynamic> row, {bool popCurrentRoute = false}) async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     final id = fieldRowId(row);
@@ -153,7 +155,7 @@ class _QuotationsPageState extends State<QuotationsPage> {
 
   Future<void> _openCreate() async {
     if (_fromCache) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offline')));
+    fieldShowOfflineBlocked(context);
       return;
     }
     if (_creating) return;
@@ -230,8 +232,8 @@ class _QuotationsPageState extends State<QuotationsPage> {
             final busy = _busyId == id;
             final items = (row['items'] as List<dynamic>? ?? const []).length;
             final showApprove = canApproveQuotation(row);
-            final showCancel = canCancelQuotation(row, _lists);
-            final showConvert = canConvertQuotation(row, _lists);
+            final showCancel = _lists.crossModuleRulesReliable && canCancelQuotation(row, _lists);
+            final showConvert = _lists.crossModuleRulesReliable && canConvertQuotation(row, _lists);
 
             return Card(
               child: InkWell(
@@ -240,6 +242,7 @@ class _QuotationsPageState extends State<QuotationsPage> {
                   widget.api,
                   MobileModule.quotations,
                   row,
+                  offline: _fromCache,
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -308,6 +311,8 @@ class QuotationDetailPage extends StatelessWidget {
     this.onConvert,
     this.onCancel,
     this.onEdit,
+    this.workflowNotice,
+    this.workflowNoticeLoading = false,
   });
 
   final ApiClient api;
@@ -317,6 +322,8 @@ class QuotationDetailPage extends StatelessWidget {
   final Future<void> Function()? onConvert;
   final Future<void> Function()? onCancel;
   final Future<void> Function()? onEdit;
+  final String? workflowNotice;
+  final bool workflowNoticeLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -329,6 +336,8 @@ class QuotationDetailPage extends StatelessWidget {
       title: quotation['id']?.toString() ?? 'Quotation',
       subtitle: quotation['customerName']?.toString() ?? 'Customer —',
       status: quotation['status']?.toString(),
+      workflowNotice: workflowNotice,
+      workflowNoticeLoading: workflowNoticeLoading,
       secondaryActions: [
         if (onEdit != null)
           OutlinedButton.icon(

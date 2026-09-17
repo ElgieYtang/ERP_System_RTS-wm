@@ -1,28 +1,37 @@
 import 'package:flutter/material.dart';
 
+import '../navigation/app_navigation.dart';
 import '../services/api_client.dart';
 import '../services/api_errors.dart';
-import '../services/document_print.dart';
+import '../services/offline_cache.dart';
+import '../services/transaction_actions.dart';
 import '../theme/app_theme.dart';
 import '../widgets/field_ui.dart';
+import '../widgets/transaction_workflows.dart';
 
 class GatePassPage extends StatefulWidget {
   const GatePassPage({
     super.key,
     required this.api,
     required this.outslip,
+    this.offline = false,
   });
 
   final ApiClient api;
   final Map<String, dynamic> outslip;
+  final bool offline;
 
   @override
   State<GatePassPage> createState() => _GatePassPageState();
 }
 
 class _GatePassPageState extends State<GatePassPage> {
+  static const _bottomBarHeight = 132.0;
+
   bool _loading = true;
   bool _busy = false;
+  String? _loadError;
+  String? _offlineLabel;
   Map<String, dynamic>? _document;
 
   final _destinationController = TextEditingController();
@@ -40,8 +49,19 @@ class _GatePassPageState extends State<GatePassPage> {
   @override
   void initState() {
     super.initState();
+    _loadOfflineLabel();
     _load();
   }
+
+  Future<void> _loadOfflineLabel() async {
+    if (!widget.offline) return;
+    final cached = await OfflineCache.loadList(OfflineCache.outslips);
+    if (!mounted) return;
+    setState(() => _offlineLabel = OfflineCache.staleLabel(cached.savedAt));
+  }
+
+  String get _offlineBannerLabel =>
+      _offlineLabel ?? OfflineCache.staleLabel(null);
 
   @override
   void dispose() {
@@ -53,21 +73,40 @@ class _GatePassPageState extends State<GatePassPage> {
     super.dispose();
   }
 
-  String get _outslipRef =>
-      widget.outslip['dbId']?.toString() ?? widget.outslip['id']?.toString() ?? '';
+  Map<String, dynamic> _formPayload() => buildGatePassPayload(
+        destination: _destinationController.text,
+        driverName: _driverController.text,
+        plateNo: _plateController.text,
+        vehicleNo: _vehicleController.text,
+        remarks: _remarksController.text,
+      );
+
+  Map<String, dynamic> _mergedDocument() {
+    if (_document == null) return {};
+    return mergeGatePassDocument(_document!, _formPayload());
+  }
+
+  bool get _canEdit =>
+      _document != null && canEditGatePass(_document!, offline: widget.offline);
+
+  bool get _canMarkExited =>
+      _document != null && canMarkGatePassExited(_document!, offline: widget.offline);
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
-      final response = await widget.api.request('GET', '/outslips/$_outslipRef/gate-pass');
-      final data = (response as Map)['data'];
-      if (data is! Map) throw ApiException('Gate pass not found.');
-      _applyDocument(Map<String, dynamic>.from(data));
+      final document = await fetchGatePassDocument(widget.api, widget.outslip);
+      if (!mounted) return;
+      setState(() => _applyDocument(document));
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error))),
-        );
+        setState(() {
+          _document = null;
+          _loadError = friendlyApiError(error);
+        });
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -83,40 +122,21 @@ class _GatePassPageState extends State<GatePassPage> {
     _remarksController.text = document['remarks']?.toString() ?? '';
   }
 
-  Map<String, dynamic> _formPayload() => {
-        'destination': _destinationController.text.trim(),
-        'driverName': _driverController.text.trim(),
-        'plateNo': _plateController.text.trim(),
-        'vehicleNo': _vehicleController.text.trim(),
-        'remarks': _remarksController.text.trim(),
-      };
-
-  Map<String, dynamic> _mergedDocument() {
-    if (_document == null) return {};
-    return {
-      ..._document!,
-      ..._formPayload(),
-    };
-  }
-
   Future<void> _save() async {
+    if (_document == null) return;
+
     setState(() => _busy = true);
     try {
-      final response = await widget.api.put('/outslips/$_outslipRef/gate-pass', _formPayload());
-      final data = (response as Map)['data'];
-      if (data is Map) {
-        setState(() => _applyDocument(Map<String, dynamic>.from(data)));
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gate pass saved.')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error))),
-        );
+      final updated = await saveGatePassDetails(
+        context,
+        widget.api,
+        widget.outslip,
+        payload: _formPayload(),
+        currentDocument: _document!,
+        offline: widget.offline,
+      );
+      if (updated != null && mounted) {
+        setState(() => _applyDocument(updated));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -124,24 +144,42 @@ class _GatePassPageState extends State<GatePassPage> {
   }
 
   Future<void> _markExited() async {
+    if (_document == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark gate pass exited?'),
+        content: const Text(
+          'This records the vehicle as having left the premises. '
+          'You cannot undo this from mobile.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Mark exited'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
     setState(() => _busy = true);
     try {
-      await widget.api.put('/outslips/$_outslipRef/gate-pass', _formPayload());
-      final response = await widget.api.post('/outslips/$_outslipRef/gate-pass/exit');
-      final data = (response as Map)['data'];
-      if (data is Map) {
-        setState(() => _applyDocument(Map<String, dynamic>.from(data)));
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gate pass marked as exited.')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error))),
-        );
+      final updated = await markGatePassAsExited(
+        context,
+        widget.api,
+        widget.outslip,
+        payload: _formPayload(),
+        currentDocument: _document!,
+        offline: widget.offline,
+      );
+      if (updated != null && mounted) {
+        setState(() => _applyDocument(updated));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -149,17 +187,20 @@ class _GatePassPageState extends State<GatePassPage> {
   }
 
   Future<void> _print() async {
+    if (_document == null) return;
+
     setState(() => _busy = true);
     try {
-      await DocumentPrint.shareGatePass(
+      await printGatePassDocument(
+        context,
         widget.api,
         widget.outslip,
-        documentOverride: _mergedDocument(),
+        document: _mergedDocument(),
       );
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not print gate pass: $error')),
+          SnackBar(content: Text(friendlyApiError(error))),
         );
       }
     } finally {
@@ -188,20 +229,28 @@ class _GatePassPageState extends State<GatePassPage> {
     );
   }
 
-  Widget _compactField(String label, TextEditingController controller, {int maxLines = 1}) {
+  Widget _compactField(String label, TextEditingController controller, {bool readOnly = false}) {
     return TextField(
       controller: controller,
-      maxLines: maxLines,
+      readOnly: readOnly,
       decoration: _fieldDecoration.copyWith(labelText: label),
     );
   }
 
   Widget _buildDetailsTab(Map<String, dynamic> document) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final readOnly = !_canEdit;
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: AppTheme.maroon,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(16, 12, 16, _bottomBarHeight + bottomInset + 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.offline) FieldOfflineBanner(label: _offlineBannerLabel),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(
@@ -220,6 +269,10 @@ class _GatePassPageState extends State<GatePassPage> {
                       FieldStatusChip(
                         document['outslipStatus']?.toString() ?? widget.outslip['status']?.toString(),
                       ),
+                      if (isGatePassExited(document)) ...[
+                        const SizedBox(width: 8),
+                        FieldStatusChip(document['status']?.toString()),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -252,35 +305,50 @@ class _GatePassPageState extends State<GatePassPage> {
             ),
           ),
           const SizedBox(height: 12),
-          _compactField('Destination', _destinationController),
+          _compactField('Destination', _destinationController, readOnly: readOnly),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _compactField('Driver', _driverController)),
+              Expanded(child: _compactField('Driver', _driverController, readOnly: readOnly)),
               const SizedBox(width: 10),
-              Expanded(child: _compactField('Plate No.', _plateController)),
+              Expanded(child: _compactField('Plate No.', _plateController, readOnly: readOnly)),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _compactField('Vehicle', _vehicleController)),
+              Expanded(child: _compactField('Vehicle', _vehicleController, readOnly: readOnly)),
               const SizedBox(width: 10),
-              Expanded(child: _compactField('Remarks', _remarksController)),
+              Expanded(child: _compactField('Remarks', _remarksController, readOnly: readOnly)),
             ],
           ),
         ],
       ),
+    ),
     );
   }
 
   Widget _buildItemsTab(List<Map<String, dynamic>> items) {
     if (items.isEmpty) {
-      return const Center(child: Text('No items on this gate pass.'));
+      return RefreshIndicator(
+        onRefresh: _load,
+        color: AppTheme.maroon,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 120),
+            Center(child: Text('No items on this gate pass.')),
+          ],
+        ),
+      );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: AppTheme.maroon,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, _bottomBarHeight + 12),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
@@ -330,10 +398,15 @@ class _GatePassPageState extends State<GatePassPage> {
           ),
         );
       },
+    ),
     );
   }
 
   Widget? _buildBottomBar(Map<String, dynamic> document) {
+    final canPrint = _document != null;
+    final canSave = _canEdit;
+    final canExit = _canMarkExited;
+
     return SafeArea(
       child: Container(
         decoration: BoxDecoration(
@@ -347,7 +420,7 @@ class _GatePassPageState extends State<GatePassPage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _busy ? null : _print,
+                onPressed: _busy || !canPrint ? null : _print,
                 icon: const Icon(Icons.print_outlined),
                 label: Text(_busy ? 'Working…' : 'Print gate pass'),
               ),
@@ -357,11 +430,11 @@ class _GatePassPageState extends State<GatePassPage> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _busy ? null : _save,
+                    onPressed: _busy || !canSave ? null : _save,
                     child: const Text('Save'),
                   ),
                 ),
-                if (document['status']?.toString() != 'exited') ...[
+                if (canExit) ...[
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton(
@@ -382,12 +455,20 @@ class _GatePassPageState extends State<GatePassPage> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(document['gatePassNo']?.toString() ?? 'Gate pass'),
-          actions: [
+        resizeToAvoidBottomInset: true,
+        appBar: transactionAppBar(
+          context,
+          title: document['gatePassNo']?.toString() ?? 'Gate pass',
+          showBack: true,
+          extraActions: [
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: _loading || _busy ? null : _load,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
             IconButton(
               tooltip: 'Print gate pass',
-              onPressed: _busy ? null : _print,
+              onPressed: _busy || _document == null ? null : _print,
               icon: const Icon(Icons.print_outlined),
             ),
           ],
@@ -412,6 +493,28 @@ class _GatePassPageState extends State<GatePassPage> {
     );
   }
 
+  Widget _buildErrorScaffold() {
+    return Scaffold(
+      appBar: transactionAppBar(context, title: 'Gate pass', showBack: true),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (widget.offline) FieldOfflineBanner(label: _offlineBannerLabel),
+          FieldErrorBanner(
+            message: _loadError ?? 'Gate pass unavailable.',
+            onRetry: _load,
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+            label: Text(_loading ? 'Loading…' : 'Try again'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final document = _document;
@@ -420,18 +523,15 @@ class _GatePassPageState extends State<GatePassPage> {
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
 
-    if (_loading) {
+    if (_loading && document == null && _loadError == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Gate pass')),
+        appBar: transactionAppBar(context, title: 'Gate pass', showBack: true),
         body: const Center(child: CircularProgressIndicator(color: AppTheme.maroon)),
       );
     }
 
     if (document == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Gate pass')),
-        body: const Center(child: Text('Gate pass unavailable.')),
-      );
+      return _buildErrorScaffold();
     }
 
     return _buildLoadedScaffold(document, items);

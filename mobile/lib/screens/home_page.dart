@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../navigation/mobile_modules.dart';
 import '../services/api_client.dart';
 import '../services/api_errors.dart';
+import '../services/home_counts.dart';
 import '../services/offline_cache.dart';
 import '../state/auth_state.dart';
 import '../theme/app_theme.dart';
@@ -32,33 +33,6 @@ class HomePageState extends State<HomePage> {
   }
 
   Future<void> refreshCounts() => _load();
-
-  int _countPendingQuotations(List<dynamic> rows) =>
-      rows.where((r) => r is Map && r['status'] == 'pending').length;
-
-  int _countOpenPurchaseOrders(List<dynamic> rows) => rows
-      .where((r) => r is Map && r['status'] != 'fully_received' && r['status'] != 'cancelled')
-      .length;
-
-  int _countPendingReceiving(List<dynamic> rows) =>
-      rows.where((r) => r is Map && r['status'] != 'completed').length;
-
-  int _countOpenOutslips(List<dynamic> rows) => rows
-      .where((r) => r is Map && (r['status'] == 'pending' || r['status'] == 'approved'))
-      .length;
-
-  int _countActiveDeliveries(List<dynamic> rows) => rows
-      .where(
-        (r) =>
-            r is Map && (r['status'] == 'active' || r['status'] == 'out_for_delivery'),
-      )
-      .length;
-
-  int _countUnpaidBilling(List<dynamic> rows) =>
-      rows.where((r) => r is Map && r['paymentStatus'] != 'paid').length;
-
-  int _countPendingAccomplishments(List<dynamic> rows) =>
-      rows.where((r) => r is Map && r['status'] == 'pending').length;
 
   static const _queueModules = {
     MobileModule.quotations,
@@ -110,16 +84,15 @@ class HomePageState extends State<HomePage> {
         api.getList('/accomplishments'),
       ]);
 
-      final counts = <MobileModule, int>{
-        MobileModule.quotations: _countPendingQuotations(results[0]),
-        MobileModule.purchaseOrders: _countOpenPurchaseOrders(results[1]),
-        MobileModule.receiving: _countPendingReceiving(results[2]),
-        MobileModule.outslips: _countOpenOutslips(results[3]),
-        MobileModule.deliveries: _countActiveDeliveries(results[4]),
-        MobileModule.billing: _countUnpaidBilling(results[5]),
-        MobileModule.soa: 0,
-        MobileModule.accomplishments: _countPendingAccomplishments(results[6]),
-      };
+      final counts = computeHomeModuleCounts(
+        quotations: results[0],
+        purchaseOrders: results[1],
+        receivings: results[2],
+        outslips: results[3],
+        deliveryReceipts: results[4],
+        billings: results[5],
+        accomplishments: results[6],
+      );
 
       await OfflineCache.saveList(OfflineCache.quotations, results[0]);
       await OfflineCache.saveList(OfflineCache.purchaseOrders, results[1]);
@@ -140,6 +113,51 @@ class HomePageState extends State<HomePage> {
         _loading = false;
       });
     } catch (error) {
+      final cachedLists = await Future.wait([
+        OfflineCache.loadList(OfflineCache.quotations),
+        OfflineCache.loadList(OfflineCache.purchaseOrders),
+        OfflineCache.loadList(OfflineCache.receivings),
+        OfflineCache.loadList(OfflineCache.outslips),
+        OfflineCache.loadList(OfflineCache.deliveries),
+        OfflineCache.loadList(OfflineCache.billings),
+        OfflineCache.loadList(OfflineCache.accomplishments),
+      ]);
+
+      final hasListCache = cachedLists.any((entry) => entry.savedAt != null);
+      if (!mounted) return;
+
+      if (hasListCache) {
+        DateTime? newestSavedAt;
+        for (final entry in cachedLists) {
+          final savedAt = entry.savedAt;
+          if (savedAt != null &&
+              (newestSavedAt == null || savedAt.isAfter(newestSavedAt))) {
+            newestSavedAt = savedAt;
+          }
+        }
+
+        final counts = computeHomeModuleCounts(
+          quotations: cachedLists[0].rows,
+          purchaseOrders: cachedLists[1].rows,
+          receivings: cachedLists[2].rows,
+          outslips: cachedLists[3].rows,
+          deliveryReceipts: cachedLists[4].rows,
+          billings: cachedLists[5].rows,
+          accomplishments: cachedLists[6].rows,
+        );
+
+        setState(() {
+          _counts
+            ..clear()
+            ..addAll(counts);
+          _fromCache = true;
+          _offlineLabel = OfflineCache.staleLabel(newestSavedAt);
+          _error = null;
+          _loading = false;
+        });
+        return;
+      }
+
       final cached = await OfflineCache.loadMap(OfflineCache.homeStats);
       if (!mounted) return;
       if (cached.data != null) {

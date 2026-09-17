@@ -13,7 +13,6 @@ class OfflineCache {
   static const quotations = 'rc_cache_quotations';
   static const purchaseOrders = 'rc_cache_purchase_orders';
   static const billings = 'rc_cache_billings';
-  static const inventory = 'rc_cache_inventory';
   static const homeStats = 'rc_cache_home_stats';
 
   static Future<void> saveList(String key, List<dynamic> rows) async {
