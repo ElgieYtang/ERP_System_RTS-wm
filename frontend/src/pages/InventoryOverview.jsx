@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { fetchInventoryReport } from '@/lib/reportsApi'
 import { getStatusDisplay } from '@/lib/status'
 import { Package } from 'lucide-react'
@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export function InventoryOverviewPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const navigate = useNavigate()
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)

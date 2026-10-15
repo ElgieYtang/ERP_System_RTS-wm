@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { FormField, Input, Label } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { SearchableSelect } from '@/components/ui/searchable-select'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { useSetupResource } from '@/hooks/useSetupResource'
 import { formatCurrency } from '@/lib/format'
@@ -25,7 +25,7 @@ function ReadOnlyField({ label, value }) {
 }
 
 export function AddQuotationModal({ open, onClose }) {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { addQuotation } = useTransactions()
   const customers = useSetupResource('customers')
   const itemsCatalog = useSetupResource('items')

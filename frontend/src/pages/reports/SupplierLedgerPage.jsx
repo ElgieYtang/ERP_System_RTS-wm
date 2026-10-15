@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useSetupResource } from '@/hooks/useSetupResource'
 import { formatCurrency } from '@/lib/format'
 import { fetchSupplierLedger } from '@/lib/reportsApi'
@@ -18,7 +18,7 @@ import { Printer } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 export function SupplierLedgerPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { rows: suppliers, loading: suppliersLoading } = useSetupResource('suppliers')
   const [supplierId, setSupplierId] = useState('')
   const [dateFrom, setDateFrom] = useState('')

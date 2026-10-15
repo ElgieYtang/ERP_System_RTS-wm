@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { TransactionBarcode } from '@/components/ui/transaction-barcode'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import {
   apiDeliveryReceiptToView,
@@ -236,7 +236,7 @@ function DeliveryReceiptViewBody({
 
 export function DeliveryReceiptDetailPage() {
   const { id } = useParams()
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const navigate = useNavigate()
   const {
     deliveryReceipts,

@@ -9,6 +9,7 @@ import {
   createOutslip as createOutslipRequest,
   createQuotation as createQuotationRequest,
   createReceivingFromPo as createReceivingFromPoRequest,
+  deletePurchaseOrder as deletePurchaseOrderRequest,
   dispatchOutslip as dispatchOutslipRequest,
   fetchBillings,
   fetchDeliveryReceipts,
@@ -17,8 +18,11 @@ import {
   fetchQuotations,
   fetchReceivings,
   recordBillingPayment as recordBillingPaymentRequest,
+  submitOutslip as submitOutslipRequest,
   updateDeliveryStatus as updateDeliveryStatusRequest,
+  updateOutslip as updateOutslipRequest,
   updateQuotation as updateQuotationRequest,
+  voidGatePass as voidGatePassRequest,
 } from '@/lib/transactionApi'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
@@ -161,9 +165,42 @@ function TransactionProvider({ children }) {
       }))
     }
 
+    if (data.asDraft) {
+      body.asDraft = true
+    }
+
     const payload = await createOutslipRequest(body)
     await refreshAll()
     return payload.data
+  }, [refreshAll])
+
+  const updateOutslip = useCallback(async (id, data) => {
+    const body = {}
+    if (data.dateIso || data.date) body.date = data.dateIso ?? data.date
+    if (data.items?.length) {
+      body.items = data.items.map((item) => ({
+        productId: Number(item.productId),
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice ?? 0),
+      }))
+    }
+    await updateOutslipRequest(id, body)
+    await refreshAll()
+  }, [refreshAll])
+
+  const submitOutslip = useCallback(async (id) => {
+    await submitOutslipRequest(id)
+    await refreshAll()
+  }, [refreshAll])
+
+  const deletePurchaseOrder = useCallback(async (id) => {
+    await deletePurchaseOrderRequest(id)
+    await refreshAll()
+  }, [refreshAll])
+
+  const voidGatePass = useCallback(async (outslipId) => {
+    await voidGatePassRequest(outslipId)
+    await refreshAll()
   }, [refreshAll])
 
   const approveOutslip = useCallback(async (id) => {
@@ -237,6 +274,10 @@ function TransactionProvider({ children }) {
       createReceiving,
       confirmReceiving,
       createOutslip,
+      updateOutslip,
+      submitOutslip,
+      deletePurchaseOrder,
+      voidGatePass,
       approveOutslip,
       forDispatchOutslip,
       createDeliveryFromOutslip,
@@ -262,6 +303,10 @@ function TransactionProvider({ children }) {
       createReceiving,
       confirmReceiving,
       createOutslip,
+      updateOutslip,
+      submitOutslip,
+      deletePurchaseOrder,
+      voidGatePass,
       approveOutslip,
       forDispatchOutslip,
       createDeliveryFromOutslip,

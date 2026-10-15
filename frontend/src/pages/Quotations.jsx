@@ -6,7 +6,7 @@ import { QuotationTable } from '@/components/quotations/QuotationTable'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { AddButton } from '@/components/ui/add-button'
 import { Pagination } from '@/components/ui/pagination'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { useSetupCustomers } from '@/hooks/useSetupCustomers'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -47,7 +47,7 @@ export function QuotationsPage() {
   const creating = isCreatePath(location.pathname)
   const wasCreatingRef = useRef(creating)
   const isMobile = useIsMobile()
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const {
     quotations: apiQuotations,
     loading,

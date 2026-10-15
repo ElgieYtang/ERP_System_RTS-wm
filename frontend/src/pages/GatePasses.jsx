@@ -10,34 +10,74 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Pagination } from '@/components/ui/pagination'
 import { EmptyState, TableFilters } from '@/components/ui/table-filters'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
-import { filterByDateRange } from '@/lib/dateFilter'
-import { canPrintGatePass } from '@/lib/gatePass'
+import { useServerPagedList } from '@/hooks/useServerPagedList'
+import { findDrForOutslip } from '@/lib/transactionRules'
+import { Ban } from 'lucide-react'
 import { getStatusDisplay } from '@/lib/status'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+const PAGE_SIZE = 10
+
 export function GatePassesPage() {
-  const { outslips, loading } = useTransactions()
+  const { deliveryReceipts, voidGatePass, refreshAll } = useTransactions()
+  const { showToast } = useToast()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [page, setPage] = useState(1)
+  const [voidBusy, setVoidBusy] = useState(null)
 
-  const rows = useMemo(() => {
-    let list = outslips.filter((row) => canPrintGatePass(row.status))
-    list = filterByDateRange(list, dateFrom, dateTo, 'date')
-    const q = search.trim().toLowerCase()
-    if (q) {
-      list = list.filter(
-        (row) =>
-          String(row.id ?? '').toLowerCase().includes(q) ||
-          String(row.customerName ?? '').toLowerCase().includes(q),
-      )
+  const listFilters = useMemo(
+    () => ({
+      gate_pass_eligible: 1,
+      search: search.trim() || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+    }),
+    [search, dateFrom, dateTo],
+  )
+
+  const {
+    items: pageRows,
+    meta,
+    loading,
+    reload,
+  } = useServerPagedList('/outslips', {
+    page,
+    perPage: PAGE_SIZE,
+    filters: listFilters,
+  })
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, dateFrom, dateTo])
+
+  useEffect(() => {
+    if (page > meta.totalPages) {
+      setPage(Math.max(1, meta.totalPages))
     }
-    return list
-  }, [outslips, search, dateFrom, dateTo])
+  }, [page, meta.totalPages])
+
+  async function handleVoidGatePass(row) {
+    const key = row.dbId ?? row.id
+    setVoidBusy(key)
+    try {
+      await voidGatePass(row.id)
+      showToast('success', 'Gate pass voided.')
+      await refreshAll()
+      reload()
+    } catch (caught) {
+      showToast('error', caught?.message ?? 'Could not void gate pass.')
+    } finally {
+      setVoidBusy(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -59,12 +99,13 @@ export function GatePassesPage() {
 
       {loading ? (
         <p className="text-sm text-text-secondary">Loading…</p>
-      ) : rows.length === 0 ? (
+      ) : pageRows.length === 0 && !loading ? (
         <EmptyState message="No gate passes available yet. Approve or dispatch an outslip first." />
       ) : (
+        <>
         <ResponsiveTable
           emptyMessage="No gate passes available yet."
-          mobileItems={rows.map((row) => {
+          mobileItems={pageRows.map((row) => {
             const st = getStatusDisplay(row.status)
             const outslipKey = row.id
             return {
@@ -92,7 +133,7 @@ export function GatePassesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((row) => {
+                  {pageRows.map((row) => {
                     const status = getStatusDisplay(row.status)
                     const outslipKey = row.id
                     return (
@@ -104,16 +145,41 @@ export function GatePassesPage() {
                           <Badge variant={status.variant}>{status.label}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              navigate(`/outslip/${encodeURIComponent(outslipKey)}/gate-pass/preview`)
-                            }
-                          >
-                            Gate pass
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            {findDrForOutslip(row, deliveryReceipts) ? (
+                              <button
+                                type="button"
+                                className="rounded-md p-2 text-text-secondary opacity-40"
+                                title="Cannot void gate pass after a delivery receipt exists."
+                                disabled
+                                aria-label="Gate pass locked"
+                              >
+                                <Ban className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                disabled={voidBusy === (row.dbId ?? row.id)}
+                                onClick={() => handleVoidGatePass(row)}
+                              >
+                                Void
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                navigate(
+                                  `/outslip/${encodeURIComponent(outslipKey)}/gate-pass/preview`,
+                                )
+                              }
+                            >
+                              Gate pass
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -123,6 +189,16 @@ export function GatePassesPage() {
             </div>
           }
         />
+        {meta.totalPages > 1 ? (
+          <div className="flex justify-center">
+            <Pagination
+              currentPage={meta.page}
+              totalPages={meta.totalPages}
+              onPageChange={setPage}
+            />
+          </div>
+        ) : null}
+        </>
       )}
     </div>
   )

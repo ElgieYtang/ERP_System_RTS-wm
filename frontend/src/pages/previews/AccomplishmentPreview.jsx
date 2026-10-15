@@ -1,6 +1,6 @@
 import { AccomplishmentReport } from '@/components/documents/AccomplishmentReport'
 import { PrintActions } from '@/components/documents/DocumentLayout'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import {
   deleteAccomplishmentPhoto,
   fetchAccomplishment,
@@ -17,7 +17,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 export function AccomplishmentPreviewPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
 
   const [report, setReport] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -131,7 +131,7 @@ export function AccomplishmentPreviewPage() {
   }
 
   return (
-    <div>
+    <div className="quotation-print-page">
       <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-text-secondary">
           {previewReport.id}: {imageCount} picture{imageCount === 1 ? '' : 's'} across {pageCount}{' '}

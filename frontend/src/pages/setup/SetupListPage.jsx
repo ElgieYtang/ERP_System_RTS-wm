@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { getStatusDisplay } from '@/lib/status'
 import { Eye, EyeOff } from 'lucide-react'
 
@@ -66,7 +66,7 @@ export function SetupListPage({
   onEdit,
   onDelete,
 }) {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [modalOpen, setModalOpen] = useState(false)

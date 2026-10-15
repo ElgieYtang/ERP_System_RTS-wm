@@ -82,7 +82,8 @@ https://github.com/ElgieYtang/RTS_ERP_System_Web.git
 
 ## Phase status
 
-See [docs/PHASES.md](docs/PHASES.md).
+See [docs/PHASES.md](docs/PHASES.md) and [docs/HANDOFF.md](docs/HANDOFF.md) for deploy + demo sign-off.
 
 - **Phases 1–7 complete** (auth → setup → transactions → fulfillment → reports → accomplishments → polish/QA).
-- **Phase 8 in progress:** Flutter field app in [`mobile/`](mobile/README.md).
+- **Phase 9 complete** (office web Magsayo UI parity — modals, SOA cards, barcodes, list pagination).
+- **Phase 8 in progress:** Flutter field app in [`mobile/`](mobile/README.md) (not required for office web deploy).

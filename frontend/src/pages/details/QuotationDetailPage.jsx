@@ -3,7 +3,7 @@ import { MobileDetailField, MobileDetailShell, MobileStickyActions } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { QuotationWorkflow } from '@/components/workflow/quotationWorkflow'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { useSetupResource } from '@/hooks/useSetupResource'
 import { formatCurrency } from '@/lib/format'
@@ -15,7 +15,7 @@ import { useState } from 'react'
 
 export function QuotationDetailPage() {
   const { id } = useParams()
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { quotations, loading, convertQuotationToPO, updateQuotation } = useTransactions()
   const suppliers = useSetupResource('suppliers')
   const navigate = useNavigate()

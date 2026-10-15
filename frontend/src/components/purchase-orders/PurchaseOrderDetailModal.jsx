@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { TransactionBarcode } from '@/components/ui/transaction-barcode'
+import { PoStatusChips } from '@/components/purchase-orders/PoStatusChips'
 import { formatCurrency, formatDisplayDate } from '@/lib/quotations'
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
@@ -15,7 +16,7 @@ function MetaField({ label, value }) {
   )
 }
 
-export function PurchaseOrderDetailModal({ order, onClose, onOpenReceiving }) {
+export function PurchaseOrderDetailModal({ order, onClose, onOpenReceiving, onDelete, deleteBusy }) {
   const titleId = useId()
   const closeButtonRef = useRef(null)
   const panelRef = useRef(null)
@@ -82,7 +83,12 @@ export function PurchaseOrderDetailModal({ order, onClose, onOpenReceiving }) {
             <MetaField label="Supplier" value={order.supplier || '—'} />
             <MetaField label="Date" value={formatDisplayDate(order.date) || '—'} />
             <MetaField label="Total" value={formatCurrency(order.amount)} />
-            <MetaField label="Status" value={statusLabel[order.status] ?? order.status} />
+            <div className="sm:col-span-2">
+              <p className="text-xs font-medium text-text-secondary">Status</p>
+              <div className="mt-2">
+                <PoStatusChips status={order.status} />
+              </div>
+            </div>
           </section>
 
           <section className="mb-6">
@@ -99,11 +105,23 @@ export function PurchaseOrderDetailModal({ order, onClose, onOpenReceiving }) {
             )}
           </section>
 
-          {showReceive ? (
-            <Button type="button" onClick={() => onOpenReceiving(order)}>
-              Receive Items
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap gap-3">
+            {showReceive ? (
+              <Button type="button" onClick={() => onOpenReceiving(order)}>
+                Receive Items
+              </Button>
+            ) : null}
+            {onDelete ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={deleteBusy}
+                onClick={() => onDelete(order)}
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete PO'}
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

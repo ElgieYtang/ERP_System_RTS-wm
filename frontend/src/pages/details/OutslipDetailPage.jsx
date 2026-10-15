@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useAuth } from '@/context/AuthContext'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { formatCurrency } from '@/lib/format'
 import { canPrintGatePass } from '@/lib/gatePass'
@@ -19,7 +19,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 
 export function OutslipDetailPage() {
   const { id } = useParams()
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { user } = useAuth()
   const {
     outslips,

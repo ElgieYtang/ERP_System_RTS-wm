@@ -17,8 +17,12 @@ import {
   canMarkDeliveryDelivered,
   deliverySerialsComplete,
 } from '@/lib/transactionRules'
+import { Pagination } from '@/components/ui/pagination'
+import { useServerPagedList } from '@/hooks/useServerPagedList'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+
+const PAGE_SIZE = 10
 
 const defaultFilters = {
   status: 'all',
@@ -29,9 +33,9 @@ const defaultFilters = {
 
 export function DeliveryReceiptsPage() {
   const {
-    deliveryReceipts,
+    deliveryReceipts: allDeliveryReceipts,
     billingStatements,
-    loading,
+    loading: contextLoading,
     error,
     refreshAll,
     markDeliveryOutForDelivery,
@@ -48,21 +52,60 @@ export function DeliveryReceiptsPage() {
   const [confirmDelivered, setConfirmDelivered] = useState(false)
   const [printTarget, setPrintTarget] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [page, setPage] = useState(1)
+
+  const listFilters = useMemo(
+    () => ({
+      status: filters.status,
+      search: filters.search.trim() || undefined,
+      date_from: filters.dateFrom || undefined,
+      date_to: filters.dateTo || undefined,
+    }),
+    [filters],
+  )
+
+  const {
+    items: pagedReceipts,
+    meta,
+    loading: listLoading,
+    reload: reloadList,
+  } = useServerPagedList('/delivery-receipts', {
+    page,
+    perPage: PAGE_SIZE,
+    filters: listFilters,
+  })
+
+  const deliveryReceipts = allDeliveryReceipts
 
   const statusCounts = useMemo(
     () => countDeliveryReceiptStatuses(deliveryReceipts),
     [deliveryReceipts],
   )
 
-  const filteredReceipts = useMemo(() => {
-    const filtered = filterDeliveryReceipts(deliveryReceipts, filters)
-    return filtered.map(apiDeliveryReceiptToView)
-  }, [deliveryReceipts, filters])
+  const filteredReceipts = useMemo(
+    () => pagedReceipts.map(apiDeliveryReceiptToView),
+    [pagedReceipts],
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [filters.status, filters.search, filters.dateFrom, filters.dateTo])
+
+  useEffect(() => {
+    if (page > meta.totalPages) {
+      setPage(Math.max(1, meta.totalPages))
+    }
+  }, [page, meta.totalPages])
 
   const detailReceiptRaw = useMemo(
-    () => deliveryReceipts.find((row) => row.id === detailId) ?? null,
-    [deliveryReceipts, detailId],
+    () =>
+      deliveryReceipts.find((row) => row.id === detailId) ??
+      pagedReceipts.find((row) => row.id === detailId) ??
+      null,
+    [deliveryReceipts, detailId, pagedReceipts],
   )
+
+  const loading = contextLoading || listLoading
 
   const detailReceipt = detailReceiptRaw ? apiDeliveryReceiptToView(detailReceiptRaw) : null
 
@@ -113,6 +156,7 @@ export function DeliveryReceiptsPage() {
     setBusy(true)
     try {
       await markDeliveryOutForDelivery(detailReceiptRaw.id)
+      reloadList()
       showToast('success', 'Delivery marked as out for delivery.')
     } catch (caught) {
       showToast('error', caught?.message ?? 'Could not update delivery.')
@@ -126,6 +170,7 @@ export function DeliveryReceiptsPage() {
     setBusy(true)
     try {
       await markDeliveryDelivered(detailReceiptRaw.id)
+      reloadList()
       showToast('success', 'Delivery marked as completed.')
       setConfirmDelivered(false)
     } catch (caught) {
@@ -190,13 +235,24 @@ export function DeliveryReceiptsPage() {
             </p>
           </div>
         ) : (
-          <DeliveryReceiptTable
-            receipts={filteredReceipts}
-            selectedId={selectedId}
-            onSelect={openDetails}
-            onView={openView}
-            onPrint={handlePrint}
-          />
+          <>
+            <DeliveryReceiptTable
+              receipts={filteredReceipts}
+              selectedId={selectedId}
+              onSelect={openDetails}
+              onView={openView}
+              onPrint={handlePrint}
+            />
+            {meta.totalPages > 1 ? (
+              <div className="mt-4 flex justify-center">
+                <Pagination
+                  currentPage={meta.page}
+                  totalPages={meta.totalPages}
+                  onPageChange={setPage}
+                />
+              </div>
+            ) : null}
+          </>
         )}
 
         {detailReceipt && detailReceiptRaw ? (

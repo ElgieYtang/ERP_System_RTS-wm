@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useSetupResource } from '@/hooks/useSetupResource'
 import { formatCurrency } from '@/lib/format'
 import { fetchCustomerLedger } from '@/lib/reportsApi'
@@ -18,7 +18,7 @@ import { Printer } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 export function CustomerLedgerPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { rows: customers, loading: customersLoading } = useSetupResource('customers')
   const [customerId, setCustomerId] = useState('')
   const [dateFrom, setDateFrom] = useState('')

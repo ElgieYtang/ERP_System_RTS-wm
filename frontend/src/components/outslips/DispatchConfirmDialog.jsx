@@ -1,0 +1,50 @@
+import { Button } from '@/components/ui/button'
+import { X } from 'lucide-react'
+
+export function DispatchConfirmDialog({ open, onCancel, onConfirm }) {
+  if (!open) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCancel()
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dispatch-confirm-title"
+        className="w-full max-w-md rounded-xl border border-border bg-surface shadow-lg"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 id="dispatch-confirm-title" className="text-lg font-semibold text-text-primary">
+            For Dispatch
+          </h2>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Close for dispatch confirmation"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-maroon-light hover:text-maroon"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="px-5 py-4 text-sm text-text-secondary">
+          Mark this outslip ready for dispatch? Inventory will be updated. Next, print or complete the
+          gate pass so items can leave the premises.
+        </p>
+        <div className="flex justify-end gap-3 border-t border-border px-5 py-4">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={onConfirm}>
+            Confirm
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}

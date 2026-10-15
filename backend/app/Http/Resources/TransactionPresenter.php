@@ -304,6 +304,7 @@ class TransactionPresenter
     public static function outslipStatusToFrontend(?string $status): string
     {
         return match (strtoupper((string) $status)) {
+            'DRAFT' => 'draft',
             'APPROVED' => 'approved',
             'FOR_DISPATCH', 'RELEASED' => 'for_dispatch',
             'CANCELLED', 'INACTIVE' => 'cancelled',

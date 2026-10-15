@@ -10,21 +10,46 @@ use App\Models\CustomerLedger;
 use App\Models\DeliveryReceipt;
 use App\Support\BillingAmounts;
 use App\Support\DocumentNumber;
+use App\Support\PaginatedJson;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class BillingController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $rows = Billing::query()
+        $query = Billing::query()
             ->with(['payments', 'delivery.details'])
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (Billing $billing) => TransactionPresenter::billing($billing));
+            ->orderByDesc('id');
 
-        return response()->json(['data' => $rows]);
+        $search = trim((string) $request->query('search', ''));
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search) {
+                $builder->where('billing_no', 'like', '%'.$search.'%')
+                    ->orWhere('customer_name', 'like', '%'.$search.'%');
+            });
+        }
+
+        $paymentStatus = (string) $request->query('payment_status', 'all');
+        if ($paymentStatus !== '' && $paymentStatus !== 'all') {
+            $query->where('payment_status', strtoupper($paymentStatus));
+        }
+
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        if ($dateFrom) {
+            $query->whereDate('billing_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $query->whereDate('billing_date', '<=', $dateTo);
+        }
+
+        return PaginatedJson::respond(
+            $request,
+            $query,
+            fn (Billing $billing) => TransactionPresenter::billing($billing),
+        );
     }
 
     public function show(string $id): JsonResponse

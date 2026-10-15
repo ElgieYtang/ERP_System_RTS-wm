@@ -1,6 +1,5 @@
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { ErpProvider } from '@/data/erpStore'
 import { AccomplishmentReportsPage } from '@/pages/AccomplishmentReports'
 import { BillingPage } from '@/pages/Billing'
 import { DashboardPage } from '@/pages/Dashboard'
@@ -18,7 +17,6 @@ import { OutslipsPage } from '@/pages/Outslips'
 import { PurchaseOrdersPage } from '@/pages/PurchaseOrders'
 import { QuotationsPage } from '@/pages/Quotations'
 import { ReceivingPage } from '@/pages/Receiving'
-import { ReportsPage } from '@/pages/Reports'
 import { SettingsPage } from '@/pages/Settings'
 import { ProfilePage } from '@/pages/Profile'
 import { SOAPage } from '@/pages/SOA'
@@ -44,12 +42,12 @@ import {
   UnitMeasureSetupPage,
   UserSetupPage,
 } from '@/pages/setup/SetupPages'
+import { ItemBarcodePrintPage } from '@/pages/setup/ItemBarcodePrintPage'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 function App() {
   return (
-    <ErpProvider>
-      <BrowserRouter>
+    <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
@@ -81,6 +79,7 @@ function App() {
               <Route path="setup/model" element={<ModelSetupPage />} />
               <Route path="setup/unit-measure" element={<UnitMeasureSetupPage />} />
               <Route path="setup/item" element={<ItemSetupPage />} />
+              <Route path="setup/item/barcodes" element={<ItemBarcodePrintPage />} />
               <Route path="setup/supplier" element={<SupplierSetupPage />} />
               <Route path="setup/customer" element={<CustomerSetupPage />} />
               <Route path="profile" element={<ProfilePage />} />
@@ -99,7 +98,7 @@ function App() {
                 element={<Navigate to="/soa/preview" replace />}
               />
               <Route path="reports/supplier-ledger" element={<SupplierLedgerPage />} />
-              <Route path="inventory/reports" element={<ReportsPage />} />
+              <Route path="inventory/reports" element={<Navigate to="/reports/inventory" replace />} />
               <Route path="purchase-orders" element={<Navigate to="/purchase-order" replace />} />
               <Route path="purchase-orders/:id/preview" element={<Navigate to="/purchase-order" replace />} />
               <Route path="outslips" element={<Navigate to="/outslip" replace />} />
@@ -129,8 +128,7 @@ function App() {
             </Route>
           </Route>
         </Routes>
-      </BrowserRouter>
-    </ErpProvider>
+    </BrowserRouter>
   )
 }
 

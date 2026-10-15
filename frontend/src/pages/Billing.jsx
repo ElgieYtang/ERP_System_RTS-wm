@@ -15,15 +15,19 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { EmptyState, TableFilters } from '@/components/ui/table-filters'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { filterByDateRange } from '@/lib/dateFilter'
 import { formatCurrency } from '@/lib/format'
 import { getStatusDisplay } from '@/lib/status'
-import { useMemo, useState } from 'react'
+import { Pagination } from '@/components/ui/pagination'
+import { paginateItems } from '@/lib/quotations'
+import { useEffect, useMemo, useState } from 'react'
+
+const PAGE_SIZE = 10
 
 export function BillingPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { billingStatements, loading, recordPayment } = useTransactions()
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -31,6 +35,7 @@ export function BillingPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [paymentId, setPaymentId] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [page, setPage] = useState(1)
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
     date: new Date().toISOString().slice(0, 10),
@@ -55,6 +60,15 @@ export function BillingPage() {
     list = filterByDateRange(list, dateFrom, dateTo, 'billingDate')
     return list
   }, [billingStatements, search, statusFilter, dateFrom, dateTo])
+
+  const pagination = useMemo(
+    () => paginateItems(filtered, page, PAGE_SIZE),
+    [filtered, page],
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, dateFrom, dateTo])
 
   const paymentBill = paymentId
     ? billingStatements.find((b) => b.id === paymentId)
@@ -148,7 +162,7 @@ export function BillingPage() {
               </TableCell>
             </TableRow>
           ) : (
-            filtered.map((b) => {
+            pagination.items.map((b) => {
               const st = getStatusDisplay(b.paymentStatus)
               const balance = b.amount - (b.paidAmount ?? 0)
               return (
@@ -190,6 +204,16 @@ export function BillingPage() {
         </TableBody>
       </Table>
       </div>
+
+      {pagination.totalPages > 1 ? (
+        <div className="mt-4 flex justify-center">
+          <Pagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            onPageChange={setPage}
+          />
+        </div>
+      ) : null}
 
       <Modal open={!!paymentBill} onClose={() => setPaymentId(null)} title="Record Payment" size="md">
         {paymentBill ? (

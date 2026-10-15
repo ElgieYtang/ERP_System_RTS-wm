@@ -51,6 +51,7 @@ const navigation = [
       { label: "Model", path: "/setup/model", icon: Box },
       { label: "Unit of Measure", path: "/setup/unit-measure", icon: Ruler },
       { label: "Items", path: "/setup/item", icon: Archive },
+      { label: "Item barcodes", path: "/setup/item/barcodes", icon: Archive },
       { label: "Suppliers", path: "/setup/supplier", icon: Warehouse },
       { label: "Customers", path: "/setup/customer", icon: Users }
     ]

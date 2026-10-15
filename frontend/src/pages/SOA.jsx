@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { SoaLedger } from '@/components/soa/SoaLedger'
 import { LoadingButton } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { DateRangeFilter } from '@/components/ui/table-filters'
 import {
   Table,
@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useSetupResource } from '@/hooks/useSetupResource'
 import { formatCurrency } from '@/lib/format'
 import { fetchSoa } from '@/lib/reportsApi'
@@ -19,7 +19,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 export function SOAPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { rows: customers, loading: customersLoading } = useSetupResource('customers')
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -119,12 +119,14 @@ export function SOAPage() {
         />
       </div>
 
-      <Card className="mb-6">
-        <CardContent className="pt-4">
-          <p className="text-sm text-text-secondary">Period: {account?.periodLabel ?? '—'}</p>
-          <p className="mt-1 font-semibold">{account?.customerName ?? '—'}</p>
-        </CardContent>
-      </Card>
+      <div className="mb-6">
+        <SoaLedger
+          customerName={account?.customerName}
+          periodLabel={account?.periodLabel}
+          totals={totals}
+          rows={rows}
+        />
+      </div>
 
       {loading ? <p className="mb-4 text-sm text-text-secondary">Loading SOA…</p> : null}
 
@@ -161,28 +163,6 @@ export function SOAPage() {
         </TableBody>
       </Table>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-text-secondary">Total Charges</p>
-            <p className="text-xl font-semibold">{formatCurrency(totals.totalDebit)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-text-secondary">Total Payments</p>
-            <p className="text-xl font-semibold">{formatCurrency(totals.totalCredit)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-text-secondary">Outstanding Balance</p>
-            <p className="text-xl font-semibold text-maroon">
-              {formatCurrency(totals.outstanding)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 }

@@ -1,11 +1,13 @@
+import { CreateOutslipFromReceivingDialog } from '@/components/outslips/CreateOutslipFromReceivingDialog'
+import { DispatchConfirmDialog } from '@/components/outslips/DispatchConfirmDialog'
+import { OutslipDetailModal } from '@/components/outslips/OutslipDetailModal'
 import { ModuleStatusFilters } from '@/components/transactions/ModuleStatusFilters'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TABLE_ACTIONS_CELL_CLASS, TABLE_ACTIONS_HEAD_CLASS, TableActions } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { FormField } from '@/components/ui/input'
-import { Modal } from '@/components/ui/modal'
+import { Pagination } from '@/components/ui/pagination'
 import { ResponsiveTable } from '@/components/ui/responsive-table'
 import {
   Table,
@@ -17,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { EmptyState, TableFilters } from '@/components/ui/table-filters'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useAuth } from '@/context/AuthContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -32,7 +34,10 @@ import {
   canDispatchOutslipForUser,
   findDrForOutslip,
 } from '@/lib/transactionRules'
+import { paginateItems } from '@/lib/quotations'
 import { useMemo, useState, useEffect } from 'react'
+
+const PAGE_SIZE = 10
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 const STATUS_ORDER = ['pending', 'approved', 'for_dispatch', 'released']
@@ -47,7 +52,7 @@ function outslipUsesReceiving(outslip, receiving) {
 }
 
 export function OutslipsPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { user } = useAuth()
   const {
     outslips,
@@ -55,6 +60,7 @@ export function OutslipsPage() {
     deliveryReceipts,
     loading,
     createOutslip,
+    submitOutslip,
     approveOutslip,
     forDispatchOutslip,
     createDeliveryFromOutslip,
@@ -78,6 +84,7 @@ export function OutslipsPage() {
     customerId: '',
     receivingId: receivingFromUrl ?? '',
   })
+  const [page, setPage] = useState(1)
 
   const linkedReceiving = createForm.receivingId
     ? receivings.find(
@@ -117,6 +124,19 @@ export function OutslipsPage() {
     list.sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status))
     return list
   }, [outslips, search, statusTab, dateFrom, dateTo])
+
+  const pagination = useMemo(
+    () => paginateItems(filtered, page, PAGE_SIZE),
+    [filtered, page],
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusTab, dateFrom, dateTo])
+
+  useEffect(() => {
+    if (page > pagination.totalPages) setPage(Math.max(1, pagination.totalPages))
+  }, [page, pagination.totalPages])
 
   const viewOs = viewId ? outslips.find((o) => o.id === viewId) : null
   const completedReceivings = useMemo(
@@ -160,7 +180,7 @@ export function OutslipsPage() {
     else setViewId(id)
   }
 
-  const handleCreate = async () => {
+  const handleCreate = async (asDraft = false) => {
     if (!createForm.receivingId) {
       showToast('error', 'Select a completed receiving to create an outslip.')
       return
@@ -178,8 +198,14 @@ export function OutslipsPage() {
       const created = await createOutslip({
         customerId: linkedReceiving.customerId,
         receivingId: linkedReceiving.dbId ?? createForm.receivingId,
+        asDraft,
       })
-      showToast('success', `Outslip ${created?.id ?? ''} created.`)
+      showToast(
+        'success',
+        asDraft
+          ? `Draft outslip ${created?.id ?? ''} saved.`
+          : `Outslip ${created?.id ?? ''} submitted for approval.`,
+      )
       setCreateOpen(false)
       setCreateForm({ customerId: '', receivingId: '' })
       if (created?.id) setViewId(created.id)
@@ -278,7 +304,7 @@ export function OutslipsPage() {
 
       <ResponsiveTable
         emptyMessage="No outslips found."
-        mobileItems={filtered.map((o) => {
+        mobileItems={pagination.items.map((o) => {
           const st = getStatusDisplay(o.status === 'released' ? 'for_dispatch' : o.status)
           const itemCount = (o.items ?? []).reduce((s, i) => s + i.quantity, 0)
           return {
@@ -307,14 +333,14 @@ export function OutslipsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {pagination.items.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={7}>
                     <EmptyState />
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((o) => {
+                pagination.items.map((o) => {
                   const st = getStatusDisplay(o.status === 'released' ? 'for_dispatch' : o.status)
                   const itemCount = (o.items ?? []).reduce((s, i) => s + i.quantity, 0)
                   return (
@@ -347,237 +373,69 @@ export function OutslipsPage() {
         }
       />
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Outslip" size="lg">
-        <div className="space-y-4">
-          {completedReceivings.length === 0 ? (
-            <p className="text-sm text-text-secondary">
-              No completed receivings with a linked quotation customer are available for a new
-              outslip.
-            </p>
-          ) : (
-            <>
-              <FormField label="From Receiving (completed)">
-                <select
-                  className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
-                  value={
-                    linkedReceiving?.dbId ??
-                    linkedReceiving?.id ??
-                    createForm.receivingId
-                  }
-                  onChange={(e) => handleReceivingChange(e.target.value)}
-                >
-                  <option value="">Select receiving…</option>
-                  {completedReceivings.map((r) => (
-                    <option key={r.id} value={r.dbId ?? r.id}>
-                      {r.id} — {r.supplierName || 'Receiving'}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              {linkedReceiving ? (
-                <div className="space-y-4 rounded-lg border border-border bg-page/60 p-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                        Customer
-                      </p>
-                      <p className="mt-1 font-medium text-text-primary">{linkedCustomerName}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                        Receiving
-                      </p>
-                      <p className="mt-1 font-medium text-text-primary">{linkedReceiving.id}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                        Purchase Order
-                      </p>
-                      <p className="mt-1 text-text-primary">
-                        {linkedReceiving.purchaseOrderId || '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                        Supplier
-                      </p>
-                      <p className="mt-1 text-text-primary">
-                        {linkedReceiving.supplierName || '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-text-secondary">
-                    Customer is set from the quotation linked to this receiving.
-                  </p>
-
-                  <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-secondary">
-                      Items to release
-                    </p>
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          <TableHead>Item</TableHead>
-                          <TableHead>Qty</TableHead>
-                          <TableHead>Unit Price</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(linkedReceiving.items ?? []).length === 0 ? (
-                          <TableRow className="hover:bg-transparent">
-                            <TableCell colSpan={3} className="text-text-secondary">
-                              No items found.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          (linkedReceiving.items ?? []).map((item) => (
-                            <TableRow key={`${item.productId}-${item.productName}`}>
-                              <TableCell>{item.productName}</TableCell>
-                              <TableCell>{item.quantity ?? item.received ?? '—'}</TableCell>
-                              <TableCell>
-                                {item.unitPrice != null ? formatCurrency(item.unitPrice) : '—'}
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              ) : (
-                <p className="rounded-lg border border-dashed border-border bg-page/40 px-4 py-6 text-center text-sm text-text-secondary">
-                  Select a completed receiving to preview customer and items.
-                </p>
-              )}
-
-              <div className="flex justify-end border-t border-border pt-4">
-                <Button disabled={busy || !linkedReceiving?.customerId} onClick={handleCreate}>
-                  {busy ? 'Creating…' : 'Create Outslip'}
-                </Button>
-              </div>
-            </>
-          )}
+      {pagination.totalPages > 1 ? (
+        <div className="mt-4 flex justify-center">
+          <Pagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            onPageChange={setPage}
+          />
         </div>
-      </Modal>
+      ) : null}
 
-      <Modal open={!!viewOs} onClose={() => setViewId(null)} title="Outslip Details" size="lg">
-        {viewOs ? (
-          <div className="space-y-4 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                  Outslip No.
-                </p>
-                <p className="text-lg font-semibold text-text-primary">{viewOs.id}</p>
-              </div>
-              <Badge variant={getStatusDisplay(viewOs.status).variant}>
-                {getStatusDisplay(viewOs.status).label}
-              </Badge>
-            </div>
+      <CreateOutslipFromReceivingDialog
+        open={createOpen}
+        busy={busy}
+        receivings={completedReceivings}
+        selectedReceivingId={createForm.receivingId}
+        linkedReceiving={linkedReceiving}
+        linkedCustomerName={linkedCustomerName}
+        onReceivingChange={handleReceivingChange}
+        onConfirm={() => handleCreate(false)}
+        onSaveDraft={() => handleCreate(true)}
+        onClose={() => setCreateOpen(false)}
+      />
 
-            <div className="grid grid-cols-2 gap-4 rounded-lg border border-border bg-page/60 p-4">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                  Customer
-                </p>
-                <p className="mt-1 font-medium">{viewOs.customerName || viewOs.customerId}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                  Reference
-                </p>
-                <p className="mt-1">{viewOs.receivingId ? `RCV #${viewOs.receivingId}` : '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                  Date
-                </p>
-                <p className="mt-1">{viewOs.displayDate ?? viewOs.date ?? '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                  Items
-                </p>
-                <p className="mt-1">
-                  {(viewOs.items ?? []).reduce((sum, item) => sum + Number(item.quantity ?? 0), 0)}{' '}
-                  units
-                </p>
-              </div>
-            </div>
+      {viewOs ? (
+        <OutslipDetailModal
+          outslip={viewOs}
+          busy={busy}
+          canApprove={canApproveOutslipForUser(viewOs, user)}
+          canDispatch={canDispatchOutslipForUser(viewOs, user)}
+          canCreateDr={canCreateDrFromOutslip(viewOs, deliveryReceipts)}
+          drForOutslip={findDrForOutslip(viewOs, deliveryReceipts)}
+          canGatePass={canPrintGatePass(viewOs.status)}
+          onClose={() => setViewId(null)}
+          onApprove={() => handleApprove(viewOs.id)}
+          onDispatch={() => setDispatchId(viewOs.id)}
+          onCreateDr={() => setCreateDrId(viewOs.id)}
+          onViewDr={() => {
+            const dr = findDrForOutslip(viewOs, deliveryReceipts)
+            setViewId(null)
+            if (dr) navigate(`/delivery-receipt/${dr.id}`)
+          }}
+          onGatePass={() => {
+            setViewId(null)
+            navigate(`/outslip/${viewOs.id}/gate-pass/preview`)
+          }}
+          canSubmit={viewOs.status === 'draft'}
+          onSubmit={async () => {
+            setBusy(true)
+            try {
+              await submitOutslip(viewOs.id)
+              showToast('success', 'Outslip submitted for approval.')
+            } catch (caught) {
+              showToast('error', caught?.message ?? 'Could not submit outslip.')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        />
+      ) : null}
 
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Item</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead>Unit Price</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(viewOs.items ?? []).map((item) => (
-                  <TableRow key={item.productId}>
-                    <TableCell>{item.productName}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell>
-                      {item.unitPrice != null ? formatCurrency(item.unitPrice) : '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            <div className="flex flex-col gap-3 border-t border-border pt-4">
-              {canApproveOutslipForUser(viewOs, user) ? (
-                <Button disabled={busy} onClick={() => handleApprove(viewOs.id)}>
-                  Approve
-                </Button>
-              ) : null}
-              {canDispatchOutslipForUser(viewOs, user) ? (
-                <Button disabled={busy} onClick={() => setDispatchId(viewOs.id)}>
-                  For Dispatch
-                </Button>
-              ) : null}
-              {canCreateDrFromOutslip(viewOs, deliveryReceipts) ? (
-                <Button disabled={busy} onClick={() => setCreateDrId(viewOs.id)}>
-                  Create Delivery Receipt
-                </Button>
-              ) : null}
-              {findDrForOutslip(viewOs, deliveryReceipts) ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    const dr = findDrForOutslip(viewOs, deliveryReceipts)
-                    setViewId(null)
-                    navigate(`/delivery-receipt/${dr.id}`)
-                  }}
-                >
-                  View Delivery Receipt
-                </Button>
-              ) : null}
-              {canPrintGatePass(viewOs.status) ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setViewId(null)
-                    navigate(`/outslip/${viewOs.id}/gate-pass/preview`)
-                  }}
-                >
-                  Print Gate Pass
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-      </Modal>
-
-      <ConfirmDialog
+      <DispatchConfirmDialog
         open={!!dispatchId}
-        onClose={() => setDispatchId(null)}
-        title="For Dispatch"
-        message="Mark this outslip ready for dispatch? Inventory will be updated."
-        confirmLabel="Confirm"
+        onCancel={() => setDispatchId(null)}
         onConfirm={() => {
           if (dispatchId) handleDispatch(dispatchId)
         }}

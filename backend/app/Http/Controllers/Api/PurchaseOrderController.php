@@ -8,32 +8,74 @@ use App\Models\PurchaseOrder;
 use App\Models\Quotation;
 use App\Models\Receiving;
 use App\Models\ReceivingDetail;
+use App\Models\SupplierLedger;
 use App\Support\DocumentNumber;
+use App\Support\PaginatedJson;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class PurchaseOrderController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $rows = PurchaseOrder::query()
-            ->with('details')
-            ->orderByDesc('id')
-            ->get()
-            ->map(function (PurchaseOrder $po) {
-                $presented = TransactionPresenter::purchaseOrder($po);
+        $query = PurchaseOrder::query()->with('details')->orderByDesc('id');
 
-                if ($po->quotation_id) {
-                    $qtn = Quotation::query()->find($po->quotation_id);
-                    $presented['referenceQuotationNo'] = $qtn?->quotation_no;
-                    $presented['referenceQuotationId'] = $qtn?->quotation_no ?? (string) $po->quotation_id;
-                }
-
-                return $presented;
+        $search = trim((string) $request->query('search', ''));
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search) {
+                $builder->where('po_no', 'like', '%'.$search.'%')
+                    ->orWhere('supplier_name', 'like', '%'.$search.'%');
             });
+        }
 
-        return response()->json(['data' => $rows]);
+        $status = (string) $request->query('status', 'all');
+        if ($status !== '' && $status !== 'all') {
+            $query->where('status', TransactionPresenter::statusToDb($status));
+        }
+
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        if ($dateFrom) {
+            $query->whereDate('po_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $query->whereDate('po_date', '<=', $dateTo);
+        }
+
+        return PaginatedJson::respond($request, $query, function (PurchaseOrder $po) {
+            $presented = TransactionPresenter::purchaseOrder($po);
+
+            if ($po->quotation_id) {
+                $qtn = Quotation::query()->find($po->quotation_id);
+                $presented['referenceQuotationNo'] = $qtn?->quotation_no;
+                $presented['referenceQuotationId'] = $qtn?->quotation_no ?? (string) $po->quotation_id;
+            }
+
+            return $presented;
+        });
+    }
+
+    public function destroy(string $id): JsonResponse
+    {
+        $po = $this->findPurchaseOrder($id);
+
+        if (Receiving::query()->where('po_id', $po->id)->exists()) {
+            throw ValidationException::withMessages([
+                'purchaseOrder' => 'Cannot delete a purchase order that already has receiving records.',
+            ]);
+        }
+
+        DB::transaction(function () use ($po) {
+            SupplierLedger::query()->where('po_id', $po->id)->delete();
+            $po->details()->delete();
+            $po->delete();
+        });
+
+        return response()->json([
+            'message' => 'Purchase order deleted successfully.',
+        ]);
     }
 
     public function show(string $id): JsonResponse

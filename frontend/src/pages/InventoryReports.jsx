@@ -9,13 +9,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { fetchInventoryReport } from '@/lib/reportsApi'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export function InventoryReportsPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [report, setReport] = useState(null)

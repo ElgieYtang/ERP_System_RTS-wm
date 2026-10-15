@@ -3,7 +3,7 @@ import { PurchaseOrderFiltersBar } from '@/components/purchase-orders/PurchaseOr
 import { PurchaseOrderTable } from '@/components/purchase-orders/PurchaseOrderTable'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Pagination } from '@/components/ui/pagination'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { useSetupSuppliers } from '@/hooks/useSetupSuppliers'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -21,8 +21,10 @@ const PAGE_SIZE = 10
 const defaultFilters = { status: 'all', search: '', dateFrom: '', dateTo: '' }
 
 export function PurchaseOrdersPage() {
-  const { showToast } = useDemo()
-  const { purchaseOrders, receivings, loading, createReceiving } = useTransactions()
+  const { showToast } = useToast()
+  const { purchaseOrders, receivings, loading, createReceiving, deletePurchaseOrder } =
+    useTransactions()
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const { suppliers } = useSetupSuppliers()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -102,6 +104,20 @@ export function PurchaseOrdersPage() {
     setDetailId(null)
   }
 
+  async function handleDeletePo(order) {
+    if (!window.confirm(`Delete purchase order ${order.poNo}? This cannot be undone.`)) return
+    setDeleteBusy(true)
+    try {
+      await deletePurchaseOrder(order.poNo)
+      showToast('success', 'Purchase order deleted.')
+      closeDetail()
+    } catch (caught) {
+      showToast('error', caught?.message ?? 'Could not delete purchase order.')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   function handlePrint(order) {
     navigate(`/purchase-order/${order.poNo}/preview`)
     setTimeout(() => window.print(), 300)
@@ -164,6 +180,8 @@ export function PurchaseOrdersPage() {
           order={detailOrder}
           onClose={closeDetail}
           onOpenReceiving={handleReceive}
+          onDelete={handleDeletePo}
+          deleteBusy={deleteBusy}
         />
       ) : null}
     </div>

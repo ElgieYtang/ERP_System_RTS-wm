@@ -7,21 +7,49 @@ use App\Http\Resources\TransactionPresenter;
 use App\Models\InventoryMovement;
 use App\Models\PurchaseOrder;
 use App\Models\Receiving;
+use App\Support\PaginatedJson;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ReceivingController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $rows = Receiving::query()
+        $query = Receiving::query()
             ->with(['details', 'purchaseOrder.details'])
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (Receiving $receiving) => TransactionPresenter::receiving($receiving));
+            ->orderByDesc('id');
 
-        return response()->json(['data' => $rows]);
+        $search = trim((string) $request->query('search', ''));
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search) {
+                $builder->where('receiving_no', 'like', '%'.$search.'%')
+                    ->orWhere('remarks', 'like', '%'.$search.'%');
+            });
+        }
+
+        $status = (string) $request->query('status', 'all');
+        if ($status === 'open') {
+            $query->where('status', '!=', 'COMPLETED');
+        } elseif ($status !== '' && $status !== 'all') {
+            $query->where('status', TransactionPresenter::statusToDb($status));
+        }
+
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        if ($dateFrom) {
+            $query->whereDate('receiving_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $query->whereDate('receiving_date', '<=', $dateTo);
+        }
+
+        return PaginatedJson::respond(
+            $request,
+            $query,
+            fn (Receiving $receiving) => TransactionPresenter::receiving($receiving),
+        );
     }
 
     public function show(string $id): JsonResponse

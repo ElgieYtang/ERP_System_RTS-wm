@@ -1,7 +1,7 @@
 import { request } from '@/lib/api'
 
 function fetchQuotations() {
-  return request('/quotations').then((payload) => payload.data ?? [])
+  return request('/quotations?all=1').then((payload) => payload.data ?? [])
 }
 
 function fetchQuotation(id) {
@@ -36,7 +36,13 @@ function convertQuotationToPo(id, data) {
 }
 
 function fetchPurchaseOrders() {
-  return request('/purchase-orders').then((payload) => payload.data ?? [])
+  return request('/purchase-orders?all=1').then((payload) => payload.data ?? [])
+}
+
+function deletePurchaseOrder(id) {
+  return request(`/purchase-orders/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
 }
 
 function fetchPurchaseOrder(id) {
@@ -51,7 +57,7 @@ function createReceivingFromPo(poId, data = {}) {
 }
 
 function fetchReceivings() {
-  return request('/receivings').then((payload) => payload.data ?? [])
+  return request('/receivings?all=1').then((payload) => payload.data ?? [])
 }
 
 function confirmReceiving(id) {
@@ -61,13 +67,26 @@ function confirmReceiving(id) {
 }
 
 function fetchOutslips() {
-  return request('/outslips').then((payload) => payload.data ?? [])
+  return request('/outslips?all=1').then((payload) => payload.data ?? [])
 }
 
 function createOutslip(data) {
   return request('/outslips', {
     method: 'POST',
     body: JSON.stringify(data),
+  })
+}
+
+function updateOutslip(id, data) {
+  return request(`/outslips/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+function submitOutslip(id) {
+  return request(`/outslips/${encodeURIComponent(id)}/submit`, {
+    method: 'POST',
   })
 }
 
@@ -102,8 +121,14 @@ function markGatePassExit(outslipId) {
   }).then((payload) => payload.data)
 }
 
+function voidGatePass(outslipId) {
+  return request(`/outslips/${encodeURIComponent(outslipId)}/gate-pass/void`, {
+    method: 'POST',
+  })
+}
+
 function fetchDeliveryReceipts() {
-  return request('/delivery-receipts').then((payload) => payload.data ?? [])
+  return request('/delivery-receipts?all=1').then((payload) => payload.data ?? [])
 }
 
 function fetchDeliveryReceipt(id) {
@@ -138,7 +163,7 @@ function fetchSetupItemByBarcode(barcode) {
 }
 
 function fetchBillings() {
-  return request('/billings').then((payload) => payload.data ?? [])
+  return request('/billings?all=1').then((payload) => payload.data ?? [])
 }
 
 function createBilling(data) {
@@ -165,6 +190,7 @@ export {
   createOutslip,
   createQuotation,
   createReceivingFromPo,
+  deletePurchaseOrder,
   dispatchOutslip,
   fetchBillings,
   fetchDeliveryReceipt,
@@ -180,7 +206,10 @@ export {
   markGatePassExit,
   recordBillingPayment,
   saveGatePass,
+  submitOutslip,
   updateDeliverySerials,
   updateDeliveryStatus,
+  updateOutslip,
   updateQuotation,
+  voidGatePass,
 }

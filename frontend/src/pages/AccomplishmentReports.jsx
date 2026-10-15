@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { EmptyState } from '@/components/ui/table-filters'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useSetupResource } from '@/hooks/useSetupResource'
 import {
   createAccomplishment,
@@ -26,7 +26,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export function AccomplishmentReportsPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { rows: projects, loading: projectsLoading } = useSetupResource('projects')
   const navigate = useNavigate()
   const [reports, setReports] = useState([])

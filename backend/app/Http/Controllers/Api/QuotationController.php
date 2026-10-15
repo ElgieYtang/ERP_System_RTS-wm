@@ -12,21 +12,72 @@ use App\Models\SetupItem;
 use App\Models\SetupSupplier;
 use App\Models\SupplierLedger;
 use App\Support\DocumentNumber;
+use App\Support\PaginatedJson;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class QuotationController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
+    {
+        $query = Quotation::query()->with('details')->orderByDesc('id');
+
+        $search = trim((string) $request->query('search', ''));
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search) {
+                $builder->where('quotation_no', 'like', '%'.$search.'%')
+                    ->orWhere('customer_name', 'like', '%'.$search.'%');
+            });
+        }
+
+        $status = (string) $request->query('status', 'all');
+        if ($status !== '' && $status !== 'all') {
+            $query->where('status', TransactionPresenter::statusToDb($status));
+        }
+
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        if ($dateFrom) {
+            $query->whereDate('quotation_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $query->whereDate('quotation_date', '<=', $dateTo);
+        }
+
+        $response = PaginatedJson::respond(
+            $request,
+            $query,
+            fn (Quotation $quotation) => TransactionPresenter::quotation($quotation),
+        );
+
+        if ($request->boolean('include_counts') && ! $request->boolean('all')) {
+            $payload = $response->getData(true);
+            $payload['meta']['statusCounts'] = $this->quotationStatusCounts();
+            $response->setData($payload);
+        }
+
+        return $response;
+    }
+
+    /** @return array<string, int> */
+    private function quotationStatusCounts(): array
     {
         $rows = Quotation::query()
-            ->with('details')
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (Quotation $quotation) => TransactionPresenter::quotation($quotation));
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
 
-        return response()->json(['data' => $rows]);
+        $counts = ['all' => (int) $rows->sum(), 'draft' => 0, 'pending' => 0, 'approved' => 0, 'rejected' => 0, 'cancelled' => 0];
+
+        foreach ($rows as $status => $count) {
+            $frontend = TransactionPresenter::statusToFrontend((string) $status);
+            if (isset($counts[$frontend])) {
+                $counts[$frontend] += (int) $count;
+            }
+        }
+
+        return $counts;
     }
 
     public function show(string $id): JsonResponse

@@ -82,3 +82,26 @@ flutter build apk --debug
 ## Next (M4+)
 - Ask head before sales QTN / billing / collections on phone
 - Not in field v1: full SOA, push, deep RBAC, write-offline queue
+
+---
+
+# Phase 9 — Magsayo web parity (complete in code)
+
+Office web UI aligned with Magsayo ERP patterns (Laravel API unchanged).
+
+- Outslip: `CreateOutslipFromReceivingDialog`, `OutslipDetailModal`, `DispatchConfirmDialog`, list pagination
+- Receiving: `ReceivingDetailModal`, list pagination
+- Purchase orders: `PoStatusChips` on detail modal
+- SOA: `SoaLedger` summary cards
+- Setup: item barcode print page (`/setup/item/barcodes`, `react-barcode`)
+- Gate pass list: lock icon when DR exists (Magsayo cancel guard)
+- Billing list pagination
+
+**Not ported (API / product limits):** outslip draft/edit/save (DB uses `PENDING` on create), PO delete, gate pass void API, Magsayo localStorage demo flows.
+
+## Handoff polish (complete in code)
+
+- Delivery receipts + gate passes: client-side list pagination
+- Document print: `quotation-print-page` included in global print visibility (preview routes)
+- Legacy demo layer removed (`DemoContext`, unused demo master pages, sample `erpStore` reports)
+- [HANDOFF.md](HANDOFF.md): demo script, deploy summary, known limitations, future work

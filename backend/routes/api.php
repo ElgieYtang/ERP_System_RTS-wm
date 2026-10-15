@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AccomplishmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeliveryReceiptController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\OutslipController;
@@ -28,6 +29,8 @@ Route::middleware(AuthenticateApiToken::class)->group(function () {
     Route::put('/settings', [SettingsController::class, 'update'])->middleware(EnsureAdmin::class);
     Route::put('/settings/password', [SettingsController::class, 'updatePassword']);
 
+    Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
+
     Route::get('/setup/items/by-barcode/{barcode}', [SetupController::class, 'showItemByBarcode']);
 
     Route::prefix('setup')->middleware(EnsureAdmin::class)->group(function () {
@@ -46,6 +49,7 @@ Route::middleware(AuthenticateApiToken::class)->group(function () {
 
     Route::get('/purchase-orders', [PurchaseOrderController::class, 'index']);
     Route::get('/purchase-orders/{id}', [PurchaseOrderController::class, 'show']);
+    Route::delete('/purchase-orders/{id}', [PurchaseOrderController::class, 'destroy'])->middleware(EnsureAdmin::class);
     Route::post('/purchase-orders/{id}/receivings', [PurchaseOrderController::class, 'createReceiving']);
 
     Route::get('/receivings', [ReceivingController::class, 'index']);
@@ -54,12 +58,15 @@ Route::middleware(AuthenticateApiToken::class)->group(function () {
 
     Route::get('/outslips', [OutslipController::class, 'index']);
     Route::post('/outslips', [OutslipController::class, 'store']);
+    Route::put('/outslips/{id}', [OutslipController::class, 'update']);
+    Route::post('/outslips/{id}/submit', [OutslipController::class, 'submit']);
     Route::get('/outslips/{id}', [OutslipController::class, 'show']);
     Route::post('/outslips/{id}/approve', [OutslipController::class, 'approve'])->middleware(EnsureAdmin::class);
     Route::post('/outslips/{id}/dispatch', [OutslipController::class, 'dispatch'])->middleware(EnsureAdmin::class);
     Route::get('/outslips/{id}/gate-pass', [OutslipController::class, 'showGatePass']);
     Route::put('/outslips/{id}/gate-pass', [OutslipController::class, 'saveGatePass']);
     Route::post('/outslips/{id}/gate-pass/exit', [OutslipController::class, 'markGatePassExit']);
+    Route::post('/outslips/{id}/gate-pass/void', [OutslipController::class, 'voidGatePass'])->middleware(EnsureAdmin::class);
 
     Route::get('/delivery-receipts', [DeliveryReceiptController::class, 'index']);
     Route::post('/delivery-receipts', [DeliveryReceiptController::class, 'store']);

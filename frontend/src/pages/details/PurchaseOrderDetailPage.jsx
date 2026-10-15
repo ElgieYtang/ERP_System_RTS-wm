@@ -3,7 +3,7 @@ import { MobileDetailField, MobileDetailShell, MobileStickyActions } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TransactionWorkflow } from '@/components/workflow/TransactionWorkflow'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { formatCurrency } from '@/lib/format'
 import { findReceivingForPo } from '@/lib/receiving'
@@ -12,7 +12,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 
 export function PurchaseOrderDetailPage() {
   const { id } = useParams()
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const { purchaseOrders, receivings, loading, createReceiving } = useTransactions()
   const navigate = useNavigate()
   const po = purchaseOrders.find((p) => p.id === id)

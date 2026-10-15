@@ -2,7 +2,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TABLE_ACTIONS_CELL_CLASS, TABLE_ACTIONS_HEAD_CLASS, TableActions } from '@/components/ui/action-menu'
-import { Modal } from '@/components/ui/modal'
+import { Pagination } from '@/components/ui/pagination'
 import {
   Table,
   TableBody,
@@ -12,18 +12,22 @@ import {
   TableLink,
   TableRow,
 } from '@/components/ui/table'
+import { ReceivingDetailModal } from '@/components/receiving/ReceivingDetailModal'
 import { ReceivingFiltersBar } from '@/components/receiving/ReceivingFiltersBar'
 import { EmptyState } from '@/components/ui/table-filters'
-import { useDemo } from '@/context/DemoContext'
+import { useToast } from '@/context/ToastContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { filterByDateRange } from '@/lib/dateFilter'
 import { findReceivingForPo } from '@/lib/receiving'
 import { getStatusDisplay } from '@/lib/status'
+import { paginateItems } from '@/lib/quotations'
 import { useEffect, useMemo, useState } from 'react'
+
+const PAGE_SIZE = 10
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 export function ReceivingPage() {
-  const { showToast } = useDemo()
+  const { showToast } = useToast()
   const {
     receivings,
     purchaseOrders,
@@ -43,6 +47,7 @@ export function ReceivingPage() {
   })
   const [viewId, setViewId] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [page, setPage] = useState(1)
 
   const filtered = useMemo(() => {
     let list = receivings
@@ -61,6 +66,15 @@ export function ReceivingPage() {
     list = filterByDateRange(list, filters.dateFrom, filters.dateTo, 'date')
     return list
   }, [receivings, filters])
+
+  const pagination = useMemo(
+    () => paginateItems(filtered, page, PAGE_SIZE),
+    [filtered, page],
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [filters])
 
   const viewRec = viewId ? receivings.find((r) => r.id === viewId) : null
   const linkedPo = poFromUrl ? purchaseOrders.find((p) => p.id === poFromUrl) : null
@@ -179,7 +193,7 @@ export function ReceivingPage() {
               </TableCell>
             </TableRow>
           ) : (
-            filtered.map((r) => {
+            pagination.items.map((r) => {
               const st = getStatusDisplay(r.status)
               return (
                 <TableRow key={r.id}>
@@ -203,60 +217,27 @@ export function ReceivingPage() {
       </Table>
       </div>
 
-      <Modal open={!!viewRec} onClose={() => setViewId(null)} title="Receiving Details" size="lg">
-        {viewRec ? (
-          <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-text-secondary">Receiving No:</span>{' '}
-                <strong>{viewRec.id}</strong>
-              </div>
-              <div>
-                <span className="text-text-secondary">PO:</span> {viewRec.purchaseOrderId}
-              </div>
-              <div>
-                <span className="text-text-secondary">Supplier:</span> {viewRec.supplierName}
-              </div>
-              <div>
-                <span className="text-text-secondary">Date:</span> {viewRec.displayDate ?? viewRec.date}
-              </div>
-            </div>
+      {pagination.totalPages > 1 ? (
+        <div className="mt-4 flex justify-center">
+          <Pagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            onPageChange={setPage}
+          />
+        </div>
+      ) : null}
 
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Item</TableHead>
-                  <TableHead>Ordered</TableHead>
-                  <TableHead>Received</TableHead>
-                  <TableHead>Remaining</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {viewRec.items.map((item) => (
-                  <TableRow key={`${item.productId}-${item.productName}`}>
-                    <TableCell>{item.productName}</TableCell>
-                    <TableCell>{item.ordered}</TableCell>
-                    <TableCell>{item.received}</TableCell>
-                    <TableCell>{item.remaining}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            {viewRec.status !== 'completed' ? (
-              <Button onClick={() => handleConfirm(viewRec.id)} disabled={busy}>
-                {busy ? 'Confirming…' : 'Confirm Receiving'}
-              </Button>
-            ) : (
-              <Button
-                onClick={() => navigate(`/outslip?receiving=${encodeURIComponent(viewRec.id)}`)}
-              >
-                Create Outslip
-              </Button>
-            )}
-          </div>
-        ) : null}
-      </Modal>
+      <ReceivingDetailModal
+        receiving={viewRec}
+        busy={busy}
+        onClose={() => setViewId(null)}
+        onConfirm={() => viewRec && handleConfirm(viewRec.id)}
+        onCreateOutslip={() => {
+          if (!viewRec) return
+          setViewId(null)
+          navigate(`/outslip?receiving=${encodeURIComponent(viewRec.id)}`)
+        }}
+      />
     </div>
   )
 }

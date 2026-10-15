@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TransactionPresenter;
+use App\Models\DeliveryReceipt;
 use App\Models\GatePass;
 use App\Models\InventoryMovement;
 use App\Models\Outslip;
@@ -13,6 +14,7 @@ use App\Models\SetupCustomer;
 use App\Models\SetupItem;
 use App\Support\DocumentNumber;
 use App\Support\InventoryStock;
+use App\Support\PaginatedJson;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,15 +22,41 @@ use Illuminate\Validation\ValidationException;
 
 class OutslipController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $rows = Outslip::query()
-            ->with(['details', 'gatePass'])
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (Outslip $outslip) => TransactionPresenter::outslip($outslip));
+        $query = Outslip::query()->with(['details', 'gatePass'])->orderByDesc('id');
 
-        return response()->json(['data' => $rows]);
+        $search = trim((string) $request->query('search', ''));
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search) {
+                $builder->where('outslip_no', 'like', '%'.$search.'%')
+                    ->orWhere('customer_name', 'like', '%'.$search.'%');
+            });
+        }
+
+        if ($request->boolean('gate_pass_eligible')) {
+            $query->whereIn('status', ['APPROVED', 'FOR_DISPATCH', 'RELEASED']);
+        } else {
+            $status = (string) $request->query('status', 'all');
+            if ($status !== '' && $status !== 'all') {
+                $query->where('status', TransactionPresenter::statusToDb($status));
+            }
+        }
+
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        if ($dateFrom) {
+            $query->whereDate('outslip_date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $query->whereDate('outslip_date', '<=', $dateTo);
+        }
+
+        return PaginatedJson::respond(
+            $request,
+            $query,
+            fn (Outslip $outslip) => TransactionPresenter::outslip($outslip),
+        );
     }
 
     public function show(string $id): JsonResponse
@@ -49,6 +77,7 @@ class OutslipController extends Controller
             'items.*.productId' => ['required_with:items', 'integer', 'exists:setup_items,id'],
             'items.*.quantity' => ['required_with:items', 'numeric', 'min:0.01'],
             'items.*.unitPrice' => ['nullable', 'numeric', 'min:0'],
+            'asDraft' => ['nullable', 'boolean'],
         ]);
 
         $user = $request->attributes->get('auth_user');
@@ -91,7 +120,7 @@ class OutslipController extends Controller
                 'receiving_id' => $receivingId,
                 'branch_id' => (int) ($payload['branchId'] ?? 1),
                 'prepared_by' => $user?->id ?? 0,
-                'status' => 'PENDING',
+                'status' => ! empty($payload['asDraft']) ? 'DRAFT' : 'PENDING',
             ]);
 
             foreach ($lines as $line) {
@@ -105,6 +134,72 @@ class OutslipController extends Controller
             'message' => 'Outslip created successfully.',
             'data' => TransactionPresenter::outslip($outslip),
         ], 201);
+    }
+
+    public function update(Request $request, string $id): JsonResponse
+    {
+        $payload = $request->validate([
+            'date' => ['nullable', 'date'],
+            'items' => ['sometimes', 'array', 'min:1'],
+            'items.*.productId' => ['required_with:items', 'integer', 'exists:setup_items,id'],
+            'items.*.quantity' => ['required_with:items', 'numeric', 'min:0.01'],
+            'items.*.unitPrice' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $outslip = DB::transaction(function () use ($id, $payload) {
+            $outslip = $this->findOutslipForUpdate($id);
+            $status = strtoupper((string) $outslip->status);
+
+            if (! in_array($status, ['DRAFT', 'PENDING'], true)) {
+                throw ValidationException::withMessages([
+                    'outslip' => 'Only draft or pending outslips can be edited.',
+                ]);
+            }
+
+            if (array_key_exists('date', $payload) && $payload['date']) {
+                $outslip->outslip_date = $payload['date'];
+            }
+
+            if (isset($payload['items'])) {
+                $lines = $this->buildLines($payload['items']);
+                $outslip->details()->delete();
+                foreach ($lines as $line) {
+                    $outslip->details()->create($line);
+                }
+            }
+
+            $outslip->save();
+
+            return $outslip->fresh(['details', 'gatePass']);
+        });
+
+        return response()->json([
+            'message' => 'Outslip updated.',
+            'data' => TransactionPresenter::outslip($outslip),
+        ]);
+    }
+
+    public function submit(Request $request, string $id): JsonResponse
+    {
+        $outslip = DB::transaction(function () use ($id) {
+            $outslip = $this->findOutslipForUpdate($id);
+
+            if (strtoupper((string) $outslip->status) !== 'DRAFT') {
+                throw ValidationException::withMessages([
+                    'outslip' => 'Only draft outslips can be submitted for approval.',
+                ]);
+            }
+
+            $outslip->status = 'PENDING';
+            $outslip->save();
+
+            return $outslip->fresh(['details', 'gatePass']);
+        });
+
+        return response()->json([
+            'message' => 'Outslip submitted for approval.',
+            'data' => TransactionPresenter::outslip($outslip),
+        ]);
     }
 
     public function approve(Request $request, string $id): JsonResponse
@@ -257,6 +352,63 @@ class OutslipController extends Controller
 
         return response()->json([
             'message' => 'Gate pass marked as exited.',
+            'data' => $document,
+        ]);
+    }
+
+    public function voidGatePass(Request $request, string $id): JsonResponse
+    {
+        $outslip = $this->findOutslip($id);
+
+        if (DeliveryReceipt::query()->where('outslip_id', $outslip->id)->exists()) {
+            throw ValidationException::withMessages([
+                'gatePass' => 'Cannot void a gate pass after a delivery receipt exists.',
+            ]);
+        }
+
+        $document = DB::transaction(function () use ($outslip) {
+            $outslip = $this->findOutslipForUpdate((string) $outslip->id);
+            $gatePass = GatePass::query()
+                ->where('outslip_id', $outslip->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $gatePass) {
+                throw ValidationException::withMessages([
+                    'gatePass' => 'No gate pass exists for this outslip.',
+                ]);
+            }
+
+            if (strtoupper((string) $gatePass->status) === 'VOID') {
+                throw ValidationException::withMessages([
+                    'gatePass' => 'This gate pass is already void.',
+                ]);
+            }
+
+            $status = strtoupper((string) $outslip->status);
+
+            if ($status === 'FOR_DISPATCH' || $status === 'RELEASED') {
+                InventoryMovement::query()
+                    ->where('trans_type', 'OUTSLIP')
+                    ->where('trans_id', $outslip->id)
+                    ->delete();
+
+                $outslip->status = 'APPROVED';
+                $outslip->save();
+            } elseif ($status !== 'APPROVED') {
+                throw ValidationException::withMessages([
+                    'outslip' => 'Gate pass can only be voided for approved or dispatched outslips.',
+                ]);
+            }
+
+            $gatePass->status = 'VOID';
+            $gatePass->save();
+
+            return TransactionPresenter::gatePassDocument($outslip->fresh(['details', 'gatePass']), $gatePass->fresh());
+        });
+
+        return response()->json([
+            'message' => 'Gate pass voided.',
             'data' => $document,
         ]);
     }
