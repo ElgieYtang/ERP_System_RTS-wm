@@ -128,6 +128,7 @@ class _ReceivingsPageState extends State<ReceivingsPage> {
         MobileModule.outslips,
         created,
         popCurrentRoute: popCurrentRoute,
+        offline: _fromCache,
       );
     }
   }
@@ -166,7 +167,13 @@ class _ReceivingsPageState extends State<ReceivingsPage> {
             ],
             onChanged: (value) => setState(() => _filter = value),
           ),
-          if (_fromCache && _offlineLabel != null) FieldOfflineBanner(label: _offlineLabel!),
+          if (_fromCache && _offlineLabel != null)
+            FieldOfflineBanner(
+              label: _offlineLabel!,
+              hint: OfflineCache.offlineReconnectHint,
+            ),
+          if (!_lists.crossModuleRulesReliable && !_loading)
+            const FieldPartialCacheBanner(),
           if (_error != null && !_fromCache) FieldErrorBanner(message: _error!, onRetry: _load),
           if (visible.isEmpty && (_error == null || _fromCache))
             FieldEmptyState(

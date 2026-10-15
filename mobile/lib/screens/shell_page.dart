@@ -5,8 +5,8 @@ import '../navigation/mobile_modules.dart';
 import '../services/api_client.dart';
 import '../state/auth_state.dart';
 import '../theme/app_theme.dart';
+import '../navigation/module_shell.dart';
 import '../widgets/brand_logo.dart';
-import '../widgets/transactions_drawer.dart';
 import 'home_page.dart';
 
 class ShellPage extends StatefulWidget {

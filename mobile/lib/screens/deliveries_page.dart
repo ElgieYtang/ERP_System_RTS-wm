@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/api_errors.dart';
 import '../services/offline_cache.dart';
+import '../navigation/app_navigation.dart';
 import '../navigation/mobile_modules.dart';
 import '../navigation/transaction_detail_host.dart';
 import '../navigation/transaction_navigation.dart';
 import '../services/transaction_actions.dart';
 import '../services/transaction_lists.dart';
+import '../theme/app_theme.dart';
+import '../widgets/delivery_receipt_scan_panel.dart';
 import '../widgets/field_ui.dart';
 import '../widgets/print_document_button.dart';
 import '../widgets/transaction_workflows.dart';
@@ -132,6 +135,7 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
           MobileModule.billing,
           created,
           popCurrentRoute: popCurrentRoute,
+          offline: _fromCache,
         );
       }
     } finally {
@@ -162,7 +166,13 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
             ],
             onChanged: (value) => setState(() => _filter = value),
           ),
-          if (_fromCache && _offlineLabel != null) FieldOfflineBanner(label: _offlineLabel!),
+          if (_fromCache && _offlineLabel != null)
+            FieldOfflineBanner(
+              label: _offlineLabel!,
+              hint: OfflineCache.offlineReconnectHint,
+            ),
+          if (!_lists.crossModuleRulesReliable && !_loading)
+            const FieldPartialCacheBanner(),
           if (_error != null && !_fromCache) FieldErrorBanner(message: _error!, onRetry: _load),
           if (visible.isEmpty && (_error == null || _fromCache))
             FieldEmptyState(
@@ -174,8 +184,8 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
             final status = row['status']?.toString() ?? '';
             final itemCount = (row['items'] as List<dynamic>? ?? const []).length;
             final busy = _busyId == id;
-            final showOut = canMarkDeliveryOut(row);
-            final showDelivered = canMarkDeliveryDelivered(row);
+            final showOut = canMarkDeliveryOutWithSerials(row);
+            final showDelivered = canMarkDeliveryDeliveredWithSerials(row);
             final showBilling =
                 _lists.crossModuleRulesReliable && canCreateBillingFromDelivery(row, _lists);
 
@@ -253,7 +263,7 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
   }
 }
 
-class DeliveryDetailPage extends StatelessWidget {
+class DeliveryDetailPage extends StatefulWidget {
   const DeliveryDetailPage({
     super.key,
     required this.api,
@@ -261,8 +271,10 @@ class DeliveryDetailPage extends StatelessWidget {
     this.popAfterMutations = true,
     this.onSetStatus,
     this.onCreateBilling,
+    this.onDeliveryUpdated,
     this.workflowNotice,
     this.workflowNoticeLoading = false,
+    this.offline = false,
   });
 
   final ApiClient api;
@@ -270,68 +282,249 @@ class DeliveryDetailPage extends StatelessWidget {
   final bool popAfterMutations;
   final Future<void> Function(String status)? onSetStatus;
   final Future<void> Function()? onCreateBilling;
+  final ValueChanged<Map<String, dynamic>>? onDeliveryUpdated;
   final String? workflowNotice;
   final bool workflowNoticeLoading;
+  final bool offline;
+
+  @override
+  State<DeliveryDetailPage> createState() => _DeliveryDetailPageState();
+}
+
+class _DeliveryDetailPageState extends State<DeliveryDetailPage> {
+  late Map<String, dynamic> _delivery;
+  bool _serialScanOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _delivery = Map<String, dynamic>.from(widget.delivery);
+  }
+
+  @override
+  void didUpdateWidget(covariant DeliveryDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.delivery != widget.delivery) {
+      _delivery = Map<String, dynamic>.from(widget.delivery);
+    }
+  }
+
+  void _handleDeliveryUpdated(Map<String, dynamic> updated) {
+    setState(() {
+      _delivery = Map<String, dynamic>.from(updated);
+      if (updated['status']?.toString() == 'out_for_delivery' &&
+          deliverySerialsComplete(updated)) {
+        _serialScanOpen = false;
+      }
+    });
+    widget.onDeliveryUpdated?.call(updated);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final status = delivery['status']?.toString() ?? '';
-    final items = (delivery['items'] as List<dynamic>? ?? const [])
+    final items = (_delivery['items'] as List<dynamic>? ?? const [])
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
-    final customer = delivery['customerName']?.toString().isNotEmpty == true
-        ? delivery['customerName'].toString()
+    final customer = _delivery['customerName']?.toString().isNotEmpty == true
+        ? _delivery['customerName'].toString()
         : 'Customer —';
+    final status = _delivery['status']?.toString() ?? '';
+    final warehouseScan = canScanDeliverySerials(_delivery, offline: widget.offline);
+    final serialsComplete = deliverySerialsComplete(_delivery);
+    final canMarkNow = canMarkDeliveryDeliveredWithSerials(_delivery);
 
-    return FieldDetailScaffold(
-      title: delivery['id']?.toString() ?? 'Delivery',
-      subtitle: customer,
-      status: status,
-      workflowNotice: workflowNotice,
-      workflowNoticeLoading: workflowNoticeLoading,
-      secondaryActions: [
-        PrintDocumentButton(
-          onPrint: () => printDeliveryReceipt(context, api, delivery),
-          label: 'Print PDF',
-        ),
-      ],
-      primaryActions: [
-        if (onSetStatus != null && canMarkDeliveryOut(delivery))
-          FilledButton(
-            onPressed: () async {
-              await onSetStatus!('out_for_delivery');
-              if (popAfterMutations && context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Out for delivery'),
+    if (warehouseScan || _serialScanOpen) {
+      return DeliveryScanDetailView(
+        api: widget.api,
+        delivery: _delivery,
+        popAfterMutations: widget.popAfterMutations,
+        onSetStatus: widget.onSetStatus,
+        onCreateBilling: widget.onCreateBilling,
+        onSaved: _handleDeliveryUpdated,
+        workflowNotice: widget.workflowNotice,
+        workflowNoticeLoading: widget.workflowNoticeLoading,
+        offline: widget.offline,
+        onCloseScan: _serialScanOpen && status == 'out_for_delivery'
+            ? () => setState(() => _serialScanOpen = false)
+            : null,
+      );
+    }
+    final title = _delivery['id']?.toString() ?? 'Delivery';
+
+    return Scaffold(
+      appBar: transactionAppBar(context, title: title, showBack: true),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      customer,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                  if (status.isNotEmpty) FieldStatusChip(status),
+                ],
+              ),
+            ),
           ),
-        if (onSetStatus != null && canMarkDeliveryDelivered(delivery))
-          FilledButton.tonal(
-            onPressed: () async {
-              await onSetStatus!('delivered');
-              if (popAfterMutations && context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Mark delivered'),
-          ),
-        if (onCreateBilling != null)
-          FilledButton(
-            onPressed: () async => onCreateBilling!(),
-            child: const Text('Create billing'),
-          ),
-      ],
-      children: [
-        FieldDetailMeta(
-          rows: [
-            (label: 'Date', value: '${delivery['displayDate'] ?? delivery['date'] ?? '—'}'),
-            (label: 'Outslip', value: '${delivery['referenceOutslipId'] ?? '—'}'),
-            if (delivery['total'] != null)
-              (label: 'Total', value: '${delivery['total']}'),
+          if (status == 'out_for_delivery') ...[
+            const SizedBox(height: 12),
+            Card(
+              color: AppTheme.maroonLight,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.local_shipping_outlined, color: AppTheme.maroon, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            serialsComplete ? 'On the way to customer' : 'Finish serial capture',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              height: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            serialsComplete
+                                ? 'Confirm delivery when the customer receives all items.'
+                                : deliverySerialsBlockedMessage(),
+                            style: const TextStyle(height: 1.45, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
-        ),
-        const SizedBox(height: 16),
-        const FieldSectionTitle('Line items'),
-        FieldLineItems(items: items),
-      ],
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: FieldDetailMeta(
+                rows: [
+                  (label: 'Date', value: '${_delivery['displayDate'] ?? _delivery['date'] ?? '—'}'),
+                  (label: 'Outslip', value: '${_delivery['referenceOutslipId'] ?? '—'}'),
+                  if (_delivery['total'] != null)
+                    (label: 'Total', value: fieldFormatMoney(_delivery['total'])),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FieldSectionTitle('Line items'),
+                  const SizedBox(height: 12),
+                  FieldLineItems(items: items, showSerialProgress: true),
+                ],
+              ),
+            ),
+          ),
+          if (widget.workflowNotice != null) ...[
+            const SizedBox(height: 12),
+            Card(
+              color: AppTheme.maroonLight,
+              child: ListTile(
+                leading: widget.workflowNoticeLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.maroon),
+                      )
+                    : const Icon(Icons.info_outline_rounded, color: AppTheme.maroon),
+                title: Text(
+                  widget.workflowNotice!,
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary, height: 1.35),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          if (status == 'out_for_delivery' && !serialsComplete && !widget.offline) ...[
+            FilledButton.icon(
+              onPressed: () => setState(() => _serialScanOpen = true),
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Scan serial numbers'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (widget.onSetStatus != null && status == 'out_for_delivery') ...[
+            FilledButton(
+              onPressed: canMarkNow
+                  ? () async {
+                      await widget.onSetStatus!('delivered');
+                      if (widget.popAfterMutations && context.mounted) {
+                        Navigator.pop(context);
+                      }
+                    }
+                  : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(deliverySerialsBlockedMessage())),
+                      );
+                    },
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              child: const Text('Mark as delivered'),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (widget.onSetStatus != null && canMarkDeliveryOutWithSerials(_delivery)) ...[
+            const SizedBox(height: 10),
+            FilledButton(
+              onPressed: () async {
+                await widget.onSetStatus!('out_for_delivery');
+                if (widget.popAfterMutations && context.mounted) Navigator.pop(context);
+              },
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              child: const Text('Out for delivery'),
+            ),
+          ],
+          if (widget.onCreateBilling != null) ...[
+            const SizedBox(height: 10),
+            FilledButton.tonal(
+              onPressed: () async => widget.onCreateBilling!(),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              child: const Text('Create billing'),
+            ),
+          ],
+          const SizedBox(height: 10),
+          PrintDocumentButton(
+            onPrint: () => printDeliveryReceipt(context, widget.api, _delivery),
+            label: 'Print PDF',
+            enabled: !widget.offline,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,13 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../navigation/mobile_modules.dart';
 import '../services/api_client.dart';
 import '../services/api_errors.dart';
 import '../services/transaction_actions.dart';
 import '../services/transaction_lists.dart';
+import '../state/auth_state.dart';
 import '../navigation/module_navigation_scope.dart';
 import 'transaction_navigation.dart';
+import '../widgets/field_ui.dart';
 import '../widgets/transaction_workflows.dart';
+
+String? transactionDetailWorkflowNotice({
+  required bool loadingLists,
+  required bool offline,
+  required bool crossModuleRulesReliable,
+}) {
+  if (loadingLists) return 'Checking linked records…';
+  if (offline) return 'Offline — reconnect to update this record.';
+  if (!crossModuleRulesReliable) return partialCacheWorkflowMessage;
+  return null;
+}
 
 /// Detail screen with live workflow buttons — used for list open and post-create navigation.
 class TransactionDetailHost extends StatefulWidget {
@@ -108,17 +122,19 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
 
   @override
   Widget build(BuildContext context) {
+    final authUser = context.watch<AuthState>().user;
+
     return buildTransactionDetailPage(
       api: widget.api,
       module: widget.module,
       record: _record,
       popAfterMutations: false,
       offline: widget.offline,
-      workflowNotice: _loadingLists
-          ? 'Loading workflow actions…'
-          : widget.offline
-              ? 'Offline — reconnect to update this record.'
-              : null,
+      workflowNotice: transactionDetailWorkflowNotice(
+        loadingLists: _loadingLists,
+        offline: widget.offline,
+        crossModuleRulesReliable: _lists.crossModuleRulesReliable,
+      ),
       workflowNoticeLoading: _loadingLists,
       canReceive: !widget.offline &&
           _listsReady &&
@@ -171,16 +187,14 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
               })
           : null,
       onApprove: !widget.offline &&
-              widget.module == MobileModule.outslips &&
-              canApproveOutslip(_record)
+              canApproveOutslipForUser(_record, authUser)
           ? () => _run(() async {
                 final updated = await approveOutslip(context, widget.api, _record);
                 if (updated != null) await _refreshRecord(updated);
               })
           : null,
       onDispatch: !widget.offline &&
-              widget.module == MobileModule.outslips &&
-              canDispatchOutslip(_record)
+              canDispatchOutslipForUser(_record, authUser)
           ? () => _run(() async {
                 final updated = await dispatchOutslip(context, widget.api, _record);
                 if (updated != null) await _refreshRecord(updated);
@@ -212,6 +226,9 @@ class _TransactionDetailHostState extends State<TransactionDetailHost> {
                 );
                 if (updated != null) await _refreshRecord(updated);
               })
+          : null,
+      onDeliveryUpdated: !widget.offline && widget.module == MobileModule.deliveries
+          ? (updated) => _refreshRecord(updated)
           : null,
       onCreateBilling: !widget.offline &&
               _listsReady &&

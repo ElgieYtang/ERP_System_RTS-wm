@@ -14,6 +14,56 @@ class OfflineCache {
   static const purchaseOrders = 'rc_cache_purchase_orders';
   static const billings = 'rc_cache_billings';
   static const homeStats = 'rc_cache_home_stats';
+  static const projects = 'rc_cache_projects';
+  static const soaCustomers = 'rc_cache_soa_customers';
+
+  static const _gatePassPrefix = 'rc_cache_gate_pass_';
+  static const _soaReportPrefix = 'rc_cache_soa_';
+  static const _accomplishmentDetailPrefix = 'rc_cache_accomplishment_';
+
+  static String gatePassKey(String outslipRef) => '$_gatePassPrefix$outslipRef';
+
+  static String soaReportKey(String customerId, {String? from, String? to}) =>
+      '$_soaReportPrefix${customerId}_${from ?? 'any'}_${to ?? 'any'}';
+
+  static String accomplishmentDetailKey(String reportId) =>
+      '$_accomplishmentDetailPrefix$reportId';
+
+  static Future<void> saveGatePass(String outslipRef, Map<String, dynamic> document) =>
+      saveMap(gatePassKey(outslipRef), document);
+
+  static Future<({Map<String, dynamic>? data, DateTime? savedAt})> loadGatePass(
+    String outslipRef,
+  ) =>
+      loadMap(gatePassKey(outslipRef));
+
+  static Future<void> saveSoaReport(
+    String customerId, {
+    String? from,
+    String? to,
+    required Map<String, dynamic> account,
+  }) =>
+      saveMap(soaReportKey(customerId, from: from, to: to), account);
+
+  static Future<({Map<String, dynamic>? data, DateTime? savedAt})> loadSoaReport(
+    String customerId, {
+    String? from,
+    String? to,
+  }) =>
+      loadMap(soaReportKey(customerId, from: from, to: to));
+
+  static Future<void> saveAccomplishmentDetail(
+    String reportId,
+    Map<String, dynamic> report,
+  ) =>
+      saveMap(accomplishmentDetailKey(reportId), report);
+
+  static Future<({Map<String, dynamic>? data, DateTime? savedAt})> loadAccomplishmentDetail(
+    String reportId,
+  ) =>
+      loadMap(accomplishmentDetailKey(reportId));
+
+  static String offlineReconnectHint = 'Pull down to refresh when back online.';
 
   static Future<void> saveList(String key, List<dynamic> rows) async {
     final prefs = await SharedPreferences.getInstance();

@@ -106,6 +106,10 @@ function fetchDeliveryReceipts() {
   return request('/delivery-receipts').then((payload) => payload.data ?? [])
 }
 
+function fetchDeliveryReceipt(id) {
+  return request(`/delivery-receipts/${encodeURIComponent(id)}`).then((payload) => payload.data)
+}
+
 function createDeliveryReceipt(data) {
   return request('/delivery-receipts', {
     method: 'POST',
@@ -118,6 +122,19 @@ function updateDeliveryStatus(id, status) {
     method: 'POST',
     body: JSON.stringify({ status }),
   })
+}
+
+function updateDeliverySerials(id, data) {
+  return request(`/delivery-receipts/${encodeURIComponent(id)}/serials`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }).then((payload) => payload.data)
+}
+
+function fetchSetupItemByBarcode(barcode) {
+  return request(`/setup/items/by-barcode/${encodeURIComponent(barcode)}`).then(
+    (payload) => payload.data,
+  )
 }
 
 function fetchBillings() {
@@ -150,6 +167,7 @@ export {
   createReceivingFromPo,
   dispatchOutslip,
   fetchBillings,
+  fetchDeliveryReceipt,
   fetchDeliveryReceipts,
   fetchGatePass,
   fetchOutslips,
@@ -158,9 +176,11 @@ export {
   fetchQuotation,
   fetchQuotations,
   fetchReceivings,
+  fetchSetupItemByBarcode,
   markGatePassExit,
   recordBillingPayment,
   saveGatePass,
+  updateDeliverySerials,
   updateDeliveryStatus,
   updateQuotation,
 }

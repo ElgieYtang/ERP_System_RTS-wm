@@ -15,6 +15,7 @@ class SetupItem extends Model
         'brand_id',
         'model_id',
         'item_name',
+        'barcode',
         'unit_measure_id',
         'status',
     ];

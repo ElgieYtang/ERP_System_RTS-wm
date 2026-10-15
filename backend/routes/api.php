@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SetupController;
 use App\Http\Middleware\AuthenticateApiToken;
+use App\Http\Middleware\EnsureAdmin;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', [HealthController::class, 'show']);
@@ -24,10 +25,12 @@ Route::middleware(AuthenticateApiToken::class)->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     Route::get('/settings', [SettingsController::class, 'show']);
-    Route::put('/settings', [SettingsController::class, 'update']);
+    Route::put('/settings', [SettingsController::class, 'update'])->middleware(EnsureAdmin::class);
     Route::put('/settings/password', [SettingsController::class, 'updatePassword']);
 
-    Route::prefix('setup')->group(function () {
+    Route::get('/setup/items/by-barcode/{barcode}', [SetupController::class, 'showItemByBarcode']);
+
+    Route::prefix('setup')->middleware(EnsureAdmin::class)->group(function () {
         Route::get('/{resource}', [SetupController::class, 'index']);
         Route::post('/{resource}', [SetupController::class, 'store']);
         Route::put('/{resource}/{id}', [SetupController::class, 'update']);
@@ -52,8 +55,8 @@ Route::middleware(AuthenticateApiToken::class)->group(function () {
     Route::get('/outslips', [OutslipController::class, 'index']);
     Route::post('/outslips', [OutslipController::class, 'store']);
     Route::get('/outslips/{id}', [OutslipController::class, 'show']);
-    Route::post('/outslips/{id}/approve', [OutslipController::class, 'approve']);
-    Route::post('/outslips/{id}/dispatch', [OutslipController::class, 'dispatch']);
+    Route::post('/outslips/{id}/approve', [OutslipController::class, 'approve'])->middleware(EnsureAdmin::class);
+    Route::post('/outslips/{id}/dispatch', [OutslipController::class, 'dispatch'])->middleware(EnsureAdmin::class);
     Route::get('/outslips/{id}/gate-pass', [OutslipController::class, 'showGatePass']);
     Route::put('/outslips/{id}/gate-pass', [OutslipController::class, 'saveGatePass']);
     Route::post('/outslips/{id}/gate-pass/exit', [OutslipController::class, 'markGatePassExit']);
@@ -62,6 +65,7 @@ Route::middleware(AuthenticateApiToken::class)->group(function () {
     Route::post('/delivery-receipts', [DeliveryReceiptController::class, 'store']);
     Route::get('/delivery-receipts/{id}', [DeliveryReceiptController::class, 'show']);
     Route::post('/delivery-receipts/{id}/status', [DeliveryReceiptController::class, 'updateStatus']);
+    Route::put('/delivery-receipts/{id}/serials', [DeliveryReceiptController::class, 'updateSerials']);
 
     Route::get('/billings', [BillingController::class, 'index']);
     Route::post('/billings', [BillingController::class, 'store']);

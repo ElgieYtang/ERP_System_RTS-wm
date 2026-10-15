@@ -1,5 +1,4 @@
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
@@ -12,7 +11,6 @@ import {
 } from '@/components/ui/table'
 import { useDemo } from '@/context/DemoContext'
 import { fetchInventoryReport } from '@/lib/reportsApi'
-import { getStatusDisplay } from '@/lib/status'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -109,31 +107,24 @@ export function InventoryReportsPage() {
               <TableHead>Item</TableHead>
               <TableHead>Quantity</TableHead>
               <TableHead>Unit</TableHead>
-              <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {stock.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="text-text-secondary">
+                <TableCell colSpan={4} className="text-text-secondary">
                   No stock movements yet. Confirm a receiving or dispatch an outslip.
                 </TableCell>
               </TableRow>
             ) : (
-              stock.map((row) => {
-                const st = getStatusDisplay(row.status)
-                return (
-                  <TableRow key={row.itemId}>
-                    <TableCell>{row.itemCode}</TableCell>
-                    <TableCell>{row.itemName}</TableCell>
-                    <TableCell>{row.quantity}</TableCell>
-                    <TableCell>{row.unit}</TableCell>
-                    <TableCell>
-                      <Badge variant={st.variant}>{st.label}</Badge>
-                    </TableCell>
-                  </TableRow>
-                )
-              })
+              stock.map((row) => (
+                <TableRow key={row.itemId}>
+                  <TableCell>{row.itemCode}</TableCell>
+                  <TableCell>{row.itemName}</TableCell>
+                  <TableCell>{row.quantity}</TableCell>
+                  <TableCell>{row.unit}</TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>

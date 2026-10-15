@@ -8,6 +8,7 @@ use App\Models\Billing;
 use App\Models\BillingPayment;
 use App\Models\CustomerLedger;
 use App\Models\DeliveryReceipt;
+use App\Support\BillingAmounts;
 use App\Support\DocumentNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ class BillingController extends Controller
     public function index(): JsonResponse
     {
         $rows = Billing::query()
-            ->with(['payments', 'delivery'])
+            ->with(['payments', 'delivery.details'])
             ->orderByDesc('id')
             ->get()
             ->map(fn (Billing $billing) => TransactionPresenter::billing($billing));
@@ -97,15 +98,27 @@ class BillingController extends Controller
         ]);
 
         $billing = $this->findBilling($id);
-        $total = (float) $billing->billing_total;
-        $paid = (float) ($billing->paid_amount ?? 0);
-        $remaining = max(0, $total - $paid);
-        $amount = (float) $payload['amount'];
+        BillingAmounts::syncStoredTotals($billing);
+        $billing->refresh();
 
-        if ($amount > $remaining + 0.0001) {
+        $remaining = BillingAmounts::remainingDue($billing);
+        $amount = round((float) $payload['amount'], 2);
+
+        if ($remaining <= 0) {
             return response()->json([
-                'message' => 'Payment exceeds the remaining balance.',
+                'message' => 'This billing is already paid.',
             ], 422);
+        }
+
+        if ($amount > $remaining) {
+            if ($amount - $remaining <= 0.05) {
+                $amount = $remaining;
+            } else {
+                return response()->json([
+                    'message' => 'Payment exceeds the remaining balance.',
+                    'remaining' => $remaining,
+                ], 422);
+            }
         }
 
         $billing = DB::transaction(function () use ($billing, $payload, $amount) {
@@ -120,7 +133,8 @@ class BillingController extends Controller
                 'remarks' => $payload['remarks'] ?? null,
             ]);
 
-            $billing->paid_amount = (float) ($billing->paid_amount ?? 0) + $amount;
+            $billing->load('payments');
+            $billing->paid_amount = BillingAmounts::paidTotal($billing);
             $billing->save();
 
             CustomerLedger::query()->create([
@@ -130,7 +144,7 @@ class BillingController extends Controller
                 'credit' => $amount,
             ]);
 
-            return $billing->fresh(['payments', 'delivery']);
+            return $billing->fresh(['payments', 'delivery.details']);
         });
 
         return response()->json([
@@ -141,7 +155,7 @@ class BillingController extends Controller
 
     private function findBilling(string $id): Billing
     {
-        $query = Billing::query()->with(['payments', 'delivery']);
+        $query = Billing::query()->with(['payments', 'delivery.details']);
 
         if (is_numeric($id)) {
             return $query->findOrFail((int) $id);

@@ -28,7 +28,9 @@ class _RtsErpMobileAppState extends State<RtsErpMobileApp> {
   void initState() {
     super.initState();
     _api = ApiClient();
-    _auth = AuthState(_api)..bootstrap();
+    _auth = AuthState(_api);
+    _api.onSessionExpired = _auth.handleSessionExpired;
+    _auth.bootstrap();
   }
 
   @override

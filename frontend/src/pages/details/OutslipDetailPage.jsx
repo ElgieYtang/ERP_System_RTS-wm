@@ -1,19 +1,29 @@
 import { MobileDetailField, MobileDetailShell, MobileStickyActions } from '@/components/layout/MobileDetailShell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useAuth } from '@/context/AuthContext'
 import { useDemo } from '@/context/DemoContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { formatCurrency } from '@/lib/format'
 import { canPrintGatePass } from '@/lib/gatePass'
 import { getStatusDisplay } from '@/lib/status'
+import {
+  canApproveOutslipForUser,
+  canCreateDrFromOutslip,
+  canDispatchOutslipForUser,
+  findDrForOutslip,
+} from '@/lib/transactionRules'
 import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 
 export function OutslipDetailPage() {
   const { id } = useParams()
   const { showToast } = useDemo()
+  const { user } = useAuth()
   const {
     outslips,
+    deliveryReceipts,
     loading,
     approveOutslip,
     forDispatchOutslip,
@@ -21,12 +31,15 @@ export function OutslipDetailPage() {
   } = useTransactions()
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
+  const [dispatchOpen, setDispatchOpen] = useState(false)
+  const [createDrOpen, setCreateDrOpen] = useState(false)
 
   const outslip = outslips.find((o) => o.id === id)
   if (!loading && !outslip) return <Navigate to="/outslip" replace />
   if (!outslip) return <p className="p-4 text-sm text-text-secondary">Loading…</p>
 
   const st = getStatusDisplay(outslip.status === 'released' ? 'for_dispatch' : outslip.status)
+  const linkedDr = findDrForOutslip(outslip, deliveryReceipts)
 
   const handleApprove = async () => {
     setBusy(true)
@@ -45,6 +58,7 @@ export function OutslipDetailPage() {
     try {
       await forDispatchOutslip(outslip.id)
       showToast('success', 'Outslip marked for dispatch.')
+      setDispatchOpen(false)
     } catch (caught) {
       showToast('error', caught?.message ?? 'Could not dispatch.')
     } finally {
@@ -57,6 +71,7 @@ export function OutslipDetailPage() {
     try {
       const drId = await createDeliveryFromOutslip(outslip.id)
       showToast('success', 'Delivery Receipt created.')
+      setCreateDrOpen(false)
       if (drId) navigate(`/delivery-receipt/${drId}`)
     } catch (caught) {
       showToast('error', caught?.message ?? 'Could not create DR.')
@@ -72,19 +87,28 @@ export function OutslipDetailPage() {
         backTo="/outslip"
         actions={
           <MobileStickyActions>
-            {outslip.status === 'pending' ? (
+            {canApproveOutslipForUser(outslip, user) ? (
               <Button className="w-full" disabled={busy} onClick={handleApprove}>
                 Approve
               </Button>
             ) : null}
-            {outslip.status === 'approved' ? (
-              <Button className="w-full" disabled={busy} onClick={handleDispatch}>
+            {canDispatchOutslipForUser(outslip, user) ? (
+              <Button className="w-full" disabled={busy} onClick={() => setDispatchOpen(true)}>
                 Mark For Dispatch
               </Button>
             ) : null}
-            {outslip.status === 'for_dispatch' || outslip.status === 'released' ? (
-              <Button className="w-full" disabled={busy} onClick={handleCreateDR}>
+            {canCreateDrFromOutslip(outslip, deliveryReceipts) ? (
+              <Button className="w-full" disabled={busy} onClick={() => setCreateDrOpen(true)}>
                 Create Delivery Receipt
+              </Button>
+            ) : null}
+            {linkedDr ? (
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => navigate(`/delivery-receipt/${linkedDr.id}`)}
+              >
+                View Delivery Receipt
               </Button>
             ) : null}
             {canPrintGatePass(outslip.status) ? (
@@ -126,9 +150,24 @@ export function OutslipDetailPage() {
           ))}
         </div>
       </MobileDetailShell>
-      <div className="hidden md:block">
-        <Navigate to="/outslip" replace />
-      </div>
+
+      <ConfirmDialog
+        open={dispatchOpen}
+        onClose={() => setDispatchOpen(false)}
+        title="For Dispatch"
+        message="Mark this outslip ready for dispatch? Inventory will be updated."
+        confirmLabel="Confirm"
+        onConfirm={handleDispatch}
+      />
+
+      <ConfirmDialog
+        open={createDrOpen}
+        onClose={() => setCreateDrOpen(false)}
+        title="Create delivery receipt?"
+        message="Create a delivery receipt from this outslip?"
+        confirmLabel="Create DR"
+        onConfirm={handleCreateDR}
+      />
     </>
   )
 }

@@ -5,8 +5,8 @@ import { getStatusDisplay } from "@/lib/status";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 function TransactionWorkflow({ quotationId }) {
-  if (!SHOW_TRANSACTION_WORKFLOW) return null;
   const { state } = useDemo();
+  if (!SHOW_TRANSACTION_WORKFLOW) return null;
   const qtn = quotationId ? state.quotations.find((q) => q.id === quotationId) : state.quotations.find((q) => q.id === "QTN-00001");
   if (!qtn) return null;
   const po = state.purchaseOrders.find((p) => p.referenceQuotationId === qtn.id);

@@ -123,7 +123,11 @@ class _BillingPageState extends State<BillingPage> {
             ],
             onChanged: (value) => setState(() => _filter = value),
           ),
-          if (_fromCache && _offlineLabel != null) FieldOfflineBanner(label: _offlineLabel!),
+          if (_fromCache && _offlineLabel != null)
+            FieldOfflineBanner(
+              label: _offlineLabel!,
+              hint: OfflineCache.offlineReconnectHint,
+            ),
           if (_error != null && !_fromCache) FieldErrorBanner(message: _error!, onRetry: _load),
           if (visible.isEmpty && (_error == null || _fromCache))
             const FieldEmptyState(
@@ -166,7 +170,8 @@ class _BillingPageState extends State<BillingPage> {
                       Text(
                         '${row['displayDate'] ?? row['billingDate'] ?? '—'} · '
                         'DR: ${row['referenceDrId'] ?? '—'} · '
-                        '${fieldFormatMoney(row['total'])}',
+                        '${fieldFormatMoney(fieldBillingTotal(row))}'
+                        '${fieldBillingBalanceDue(row) > 0 ? ' (due: ${fieldFormatMoney(fieldBillingBalanceDue(row))})' : ''}',
                       ),
                       if (showPayment) ...[
                         const SizedBox(height: 8),
@@ -210,6 +215,10 @@ class BillingDetailPage extends StatelessWidget {
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
 
+    final total = fieldBillingTotal(billing);
+    final paid = fieldBillingPaid(billing);
+    final balanceDue = fieldBillingBalanceDue(billing);
+
     return FieldDetailScaffold(
       title: billing['id']?.toString() ?? 'Billing',
       subtitle: billing['customerName']?.toString() ?? 'Customer —',
@@ -233,6 +242,32 @@ class BillingDetailPage extends StatelessWidget {
           ),
       ],
       children: [
+        Text(
+          balanceDue > 0 ? 'Amount due' : 'Balance',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          fieldFormatMoney(balanceDue > 0 ? balanceDue : 0),
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.maroon,
+            height: 1.15,
+          ),
+        ),
+        if (paid > 0 || total > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Total ${fieldFormatMoney(total)} · Paid ${fieldFormatMoney(paid)}',
+            style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.35),
+          ),
+        ],
+        const SizedBox(height: 12),
         FieldDetailMeta(
           rows: [
             (
@@ -240,8 +275,8 @@ class BillingDetailPage extends StatelessWidget {
               value: '${billing['displayDate'] ?? billing['billingDate'] ?? '—'}',
             ),
             (label: 'Delivery receipt', value: '${billing['referenceDrId'] ?? '—'}'),
-            (label: 'Total', value: fieldFormatMoney(billing['total'])),
-            (label: 'Paid', value: fieldFormatMoney(billing['paidAmount'] ?? 0)),
+            (label: 'Total', value: fieldFormatMoney(total)),
+            (label: 'Paid', value: fieldFormatMoney(paid)),
           ],
         ),
         if (payments.isNotEmpty) ...[

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../navigation/app_navigation.dart';
+import '../services/transaction_actions.dart';
 import '../theme/app_theme.dart';
 
 String fieldRowId(Map<String, dynamic> row) =>
@@ -12,6 +13,33 @@ String fieldDbId(Map<String, dynamic> row) =>
 String fieldFormatMoney(dynamic value) {
   final amount = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '') ?? 0;
   return '₱${amount.toStringAsFixed(2)}';
+}
+
+/// Billing records from the API use [amount]; older cached rows may use [total].
+num fieldBillingTotal(Map<String, dynamic> billing) {
+  final raw = billing['amount'] ?? billing['total'];
+  final value = raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '') ?? 0;
+  return fieldRoundMoney(value);
+}
+
+num fieldBillingPaid(Map<String, dynamic> billing) {
+  final raw = billing['paidAmount'];
+  final value = raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '') ?? 0;
+  return fieldRoundMoney(value);
+}
+
+num fieldBillingBalanceDue(Map<String, dynamic> billing) {
+  final fromApi = billing['balanceDue'];
+  if (fromApi != null) {
+    final value = fromApi is num ? fromApi.toDouble() : double.tryParse(fromApi.toString());
+    if (value != null) return fieldRoundMoney(value);
+  }
+  return fieldRoundMoney(fieldBillingTotal(billing) - fieldBillingPaid(billing));
+}
+
+/// Match API currency rounding (2 decimal places).
+double fieldRoundMoney(num value) {
+  return (value.toDouble() * 100).round() / 100;
 }
 
 String fieldStatusLabel(String? status) {
@@ -150,10 +178,60 @@ class FieldErrorBanner extends StatelessWidget {
   }
 }
 
+void fieldShowBackOnlineSnackBar(BuildContext context) {
+  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Back online — data updated.')),
+  );
+}
+
+/// Shown when cross-module workflow rules cannot be trusted (partial offline cache).
+const partialCacheWorkflowMessage =
+    'Some linked records are missing from cache — create and convert actions stay hidden until you reconnect.';
+
+/// Shown when dashboard counts come from stale summary stats instead of list rows.
+const approximateHomeCountsMessage =
+    'Dashboard counts are approximate — reconnect to refresh module lists.';
+
+/// Shown when recomputed list counts disagree with cached summary stats.
+const homeCountsMismatchMessage =
+    'Dashboard counts may be incomplete — some cached lists are missing.';
+
+class FieldPartialCacheBanner extends StatelessWidget {
+  const FieldPartialCacheBanner({
+    super.key,
+    this.message = partialCacheWorkflowMessage,
+  });
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: AppTheme.maroonLight,
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        dense: true,
+        minVerticalPadding: 12,
+        leading: const Icon(Icons.link_off_rounded, color: AppTheme.maroon),
+        title: Text(
+          message,
+          style: const TextStyle(color: AppTheme.maroon, fontSize: 13, height: 1.35),
+        ),
+      ),
+    );
+  }
+}
+
 class FieldOfflineBanner extends StatelessWidget {
-  const FieldOfflineBanner({super.key, required this.label});
+  const FieldOfflineBanner({
+    super.key,
+    required this.label,
+    this.hint,
+  });
 
   final String label;
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +246,12 @@ class FieldOfflineBanner extends StatelessWidget {
           label,
           style: const TextStyle(color: AppTheme.warningText, fontSize: 13),
         ),
+        subtitle: hint == null
+            ? null
+            : Text(
+                hint!,
+                style: const TextStyle(color: AppTheme.warningText, fontSize: 12, height: 1.35),
+              ),
       ),
     );
   }
@@ -326,9 +410,14 @@ class FieldSectionTitle extends StatelessWidget {
 }
 
 class FieldLineItems extends StatelessWidget {
-  const FieldLineItems({super.key, required this.items});
+  const FieldLineItems({
+    super.key,
+    required this.items,
+    this.showSerialProgress = false,
+  });
 
   final List<Map<String, dynamic>> items;
+  final bool showSerialProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -340,9 +429,10 @@ class FieldLineItems extends StatelessWidget {
       children: items.map((item) {
         final name = item['productName']?.toString() ?? 'Item';
         final qty = item['quantity'] ?? item['received'] ?? '—';
+        final progress = showSerialProgress ? deliveryLineSerialProgress(item) : null;
         return Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: AppTheme.page,
             borderRadius: BorderRadius.circular(12),
@@ -350,7 +440,22 @@ class FieldLineItems extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w500))),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    if (progress != null && progress.needed > 0)
+                      Text(
+                        'Serials ${progress.captured}/${progress.needed}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: progress.complete ? AppTheme.successText : AppTheme.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               Text('Qty $qty', style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.maroon)),
             ],
           ),

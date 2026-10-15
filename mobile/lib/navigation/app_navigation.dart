@@ -12,11 +12,11 @@ Widget homeAppBarButton(BuildContext context) {
   );
 }
 
-Widget backAppBarButton(BuildContext context) {
+Widget backAppBarButton(BuildContext context, {VoidCallback? onPressed}) {
   return IconButton(
     icon: const Icon(Icons.arrow_back_rounded),
     tooltip: 'Back',
-    onPressed: () => Navigator.of(context).maybePop(),
+    onPressed: onPressed ?? () => Navigator.of(context).maybePop(),
   );
 }
 
@@ -27,11 +27,12 @@ PreferredSizeWidget transactionAppBar(
   required String title,
   List<Widget>? extraActions,
   bool showBack = false,
+  VoidCallback? onBack,
   PreferredSizeWidget? bottom,
 }) {
   return AppBar(
     automaticallyImplyLeading: false,
-    leading: backAppBarButton(context),
+    leading: backAppBarButton(context, onPressed: onBack),
     title: Text(
       title,
       overflow: TextOverflow.ellipsis,

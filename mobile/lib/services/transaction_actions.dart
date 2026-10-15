@@ -125,6 +125,14 @@ bool canApproveOutslip(Map<String, dynamic> row) => row['status']?.toString() ==
 
 bool canDispatchOutslip(Map<String, dynamic> row) => row['status']?.toString() == 'approved';
 
+bool userIsAdmin(Map<String, dynamic>? user) => user?['role']?.toString() == 'admin';
+
+bool canApproveOutslipForUser(Map<String, dynamic> row, Map<String, dynamic>? user) =>
+    canApproveOutslip(row) && userIsAdmin(user);
+
+bool canDispatchOutslipForUser(Map<String, dynamic> row, Map<String, dynamic>? user) =>
+    canDispatchOutslip(row) && userIsAdmin(user);
+
 bool canPrintGatePass(Map<String, dynamic> row) {
   final status = row['status']?.toString() ?? '';
   return status == 'approved' || status == 'for_dispatch' || status == 'released';
@@ -191,21 +199,97 @@ bool canCreateDrFromOutslip(Map<String, dynamic> outslip, TransactionLists lists
 
 bool canMarkDeliveryOut(Map<String, dynamic> row) => row['status']?.toString() == 'active';
 
+bool canMarkDeliveryOutWithSerials(Map<String, dynamic> row) =>
+    canMarkDeliveryOut(row) && deliverySerialsComplete(row);
+
 bool canMarkDeliveryDelivered(Map<String, dynamic> row) {
   final status = row['status']?.toString() ?? '';
   return status == 'active' || status == 'out_for_delivery';
 }
 
+int deliveryLineSerialCount(Map<String, dynamic> item) {
+  final serials = item['serialNumbers'];
+  if (serials is List) {
+    return serials
+        .where((value) => value?.toString().trim().isNotEmpty == true)
+        .length;
+  }
+  final brandSerial = item['brandSerial']?.toString();
+  if (brandSerial != null && brandSerial.trim().isNotEmpty) {
+    return brandSerial
+        .split(',')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .length;
+  }
+  return 0;
+}
+
+({int needed, int captured, bool complete}) deliveryLineSerialProgress(
+  Map<String, dynamic> item,
+) {
+  final qty = item['quantity'];
+  final needed = qty is num ? qty.round().clamp(0, 999999) : 0;
+  final captured = deliveryLineSerialCount(item);
+  return (
+    needed: needed,
+    captured: captured,
+    complete: needed == 0 || captured >= needed,
+  );
+}
+
+bool deliverySerialsComplete(Map<String, dynamic> delivery) {
+  return deliveryOverallSerialProgress(delivery).complete;
+}
+
+({int needed, int captured, bool complete}) deliveryOverallSerialProgress(
+  Map<String, dynamic> delivery,
+) {
+  final items = delivery['items'];
+  if (items is! List || items.isEmpty) {
+    return (needed: 0, captured: 0, complete: true);
+  }
+
+  var needed = 0;
+  var captured = 0;
+  for (final entry in items) {
+    if (entry is! Map) continue;
+    final progress = deliveryLineSerialProgress(Map<String, dynamic>.from(entry));
+    needed += progress.needed;
+    captured += progress.captured.clamp(0, progress.needed);
+  }
+
+  return (
+    needed: needed,
+    captured: captured,
+    complete: needed == 0 || captured >= needed,
+  );
+}
+
+bool canMarkDeliveryDeliveredWithSerials(Map<String, dynamic> row) =>
+    canMarkDeliveryDelivered(row) && deliverySerialsComplete(row);
+
+bool deliverySerialsPending(Map<String, dynamic> row) =>
+    canMarkDeliveryDelivered(row) && !deliverySerialsComplete(row);
+
+bool canScanDeliverySerials(Map<String, dynamic> row, {bool offline = false}) {
+  if (offline) return false;
+  return row['status']?.toString() == 'active';
+}
+
 bool canUpdateDeliveryStatus(Map<String, dynamic> delivery, String nextStatus) {
   switch (nextStatus) {
     case 'out_for_delivery':
-      return canMarkDeliveryOut(delivery);
+      return canMarkDeliveryOutWithSerials(delivery);
     case 'delivered':
-      return canMarkDeliveryDelivered(delivery);
+      return canMarkDeliveryDeliveredWithSerials(delivery);
     default:
       return false;
   }
 }
+
+String deliverySerialsBlockedMessage() =>
+    'Capture serial numbers for every line item before marking delivered.';
 
 bool hasBillingForDelivery(Map<String, dynamic> delivery, TransactionLists lists) {
   final drDb = fieldDbId(delivery);

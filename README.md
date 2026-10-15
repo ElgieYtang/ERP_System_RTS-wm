@@ -20,6 +20,20 @@ erp-system/
 
 ### Backend (WAMP PHP)
 
+**Windows:** you do not need `php` on PATH — from `backend\` run `serve-api.cmd` (see [backend/README.md](backend/README.md)).
+
+```bat
+cd C:\erp-system\backend
+install-deps.cmd
+copy .env.example .env
+artisan.cmd key:generate
+artisan.cmd storage:link
+artisan.cmd erp:hash-passwords
+serve-api.cmd
+```
+
+Or with an explicit PHP path:
+
 ```powershell
 $php = "C:\wamp64\bin\php\php8.3.28\php.exe"
 cd C:\erp-system\backend

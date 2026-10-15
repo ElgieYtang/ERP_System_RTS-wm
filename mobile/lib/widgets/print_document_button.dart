@@ -1,35 +1,50 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
+import '../services/api_errors.dart';
 import '../services/document_print.dart';
 import '../theme/app_theme.dart';
+
+/// Shown when print needs a live API (quotation, PO, DR) or gate pass is not loaded.
+const printRequiresConnectionMessage = 'Connect to the internet to print this document.';
 
 class PrintDocumentButton extends StatelessWidget {
   const PrintDocumentButton({
     super.key,
     required this.onPrint,
     this.label = 'Print / PDF',
+    this.enabled = true,
+    this.disabledTooltip = printRequiresConnectionMessage,
   });
 
   final Future<void> Function() onPrint;
   final String label;
+  final bool enabled;
+  final String? disabledTooltip;
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: () async {
-        try {
-          await onPrint();
-        } catch (error) {
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not create PDF: $error')),
-          );
-        }
-      },
-      icon: const Icon(Icons.print_outlined, color: AppTheme.maroon),
+    final button = OutlinedButton.icon(
+      onPressed: enabled
+          ? () async {
+              try {
+                await onPrint();
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(friendlyApiError(error))),
+                );
+              }
+            }
+          : null,
+      icon: Icon(Icons.print_outlined, color: enabled ? AppTheme.maroon : AppTheme.textSecondary),
       label: Text(label),
     );
+
+    if (!enabled && disabledTooltip != null) {
+      return Tooltip(message: disabledTooltip!, child: button);
+    }
+    return button;
   }
 }
 

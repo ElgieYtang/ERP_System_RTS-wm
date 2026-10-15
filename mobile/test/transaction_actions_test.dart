@@ -21,6 +21,61 @@ TransactionLists _lists({
 }
 
 void main() {
+  group('canReceivePurchaseOrder', () {
+    test('blocks fully received or cancelled POs', () {
+      expect(
+        canReceivePurchaseOrder({'status': 'fully_received'}, _lists()),
+        isFalse,
+      );
+      expect(
+        canReceivePurchaseOrder({'status': 'cancelled'}, _lists()),
+        isFalse,
+      );
+    });
+
+    test('blocks when an open receiving already exists', () {
+      final po = {'dbId': '3', 'id': 'PO-00003', 'status': 'approved'};
+      final lists = _lists(
+        receivings: [
+          {'purchaseOrderDbId': '3', 'status': 'pending'},
+        ],
+      );
+
+      expect(canReceivePurchaseOrder(po, lists), isFalse);
+    });
+
+    test('allows approved PO without receiving', () {
+      final po = {'dbId': '3', 'id': 'PO-00003', 'status': 'approved'};
+      expect(canReceivePurchaseOrder(po, _lists()), isTrue);
+    });
+  });
+
+  group('canConfirmReceiving', () {
+    test('allows non-completed receivings', () {
+      expect(canConfirmReceiving({'status': 'pending'}), isTrue);
+      expect(canConfirmReceiving({'status': 'completed'}), isFalse);
+    });
+  });
+
+  group('outslip admin actions', () {
+    test('approve and dispatch require admin role', () {
+      const row = {'status': 'pending'};
+      const admin = {'role': 'admin'};
+      const staff = {'role': 'staff'};
+
+      expect(canApproveOutslipForUser(row, admin), isTrue);
+      expect(canApproveOutslipForUser(row, staff), isFalse);
+      expect(
+        canDispatchOutslipForUser({'status': 'approved'}, admin),
+        isTrue,
+      );
+      expect(
+        canDispatchOutslipForUser({'status': 'approved'}, staff),
+        isFalse,
+      );
+    });
+  });
+
   group('canCreateOutslipFromReceiving', () {
     test('allows completed receiving with quotation customer and no outslip', () {
       final receiving = {
@@ -208,6 +263,90 @@ void main() {
       expect(canRecordBillingPayment({'paymentStatus': 'unpaid'}), isTrue);
       expect(canRecordBillingPayment({'paymentStatus': 'partially_paid'}), isTrue);
       expect(canRecordBillingPayment({'paymentStatus': 'paid'}), isFalse);
+    });
+
+    test('canMarkDeliveryDeliveredWithSerials requires serial count to match qty', () {
+      final delivery = {
+        'status': 'active',
+        'items': [
+          {
+            'productId': '1',
+            'quantity': 2,
+            'serialNumbers': ['SN-001'],
+          },
+        ],
+      };
+
+      expect(canMarkDeliveryDelivered(delivery), isTrue);
+      expect(canMarkDeliveryDeliveredWithSerials(delivery), isFalse);
+      expect(deliverySerialsPending(delivery), isTrue);
+
+      final complete = {
+        ...delivery,
+        'items': [
+          {
+            'productId': '1',
+            'quantity': 2,
+            'serialNumbers': ['SN-001', 'SN-002'],
+          },
+        ],
+      };
+      expect(canMarkDeliveryDeliveredWithSerials(complete), isTrue);
+      expect(deliverySerialsPending(complete), isFalse);
+    });
+
+    test('canScanDeliverySerials only while active (warehouse)', () {
+      expect(canScanDeliverySerials({'status': 'active'}), isTrue);
+      expect(
+        canScanDeliverySerials({
+          'status': 'out_for_delivery',
+          'items': [
+            {'productId': '1', 'quantity': 1, 'serialNumbers': []},
+          ],
+        }),
+        isFalse,
+      );
+      expect(canScanDeliverySerials({'status': 'delivered'}), isFalse);
+      expect(canScanDeliverySerials({'status': 'active'}, offline: true), isFalse);
+    });
+
+    test('canMarkDeliveryOutWithSerials requires complete serials', () {
+      final incomplete = {
+        'status': 'active',
+        'items': [
+          {'productId': '1', 'quantity': 1, 'serialNumbers': []},
+        ],
+      };
+      expect(canMarkDeliveryOut(incomplete), isTrue);
+      expect(canMarkDeliveryOutWithSerials(incomplete), isFalse);
+
+      final complete = {
+        'status': 'active',
+        'items': [
+          {'productId': '1', 'quantity': 1, 'serialNumbers': ['SN-1']},
+        ],
+      };
+      expect(canMarkDeliveryOutWithSerials(complete), isTrue);
+    });
+
+    test('canUpdateDeliveryStatus blocks delivered when serials incomplete', () {
+      final delivery = {
+        'status': 'out_for_delivery',
+        'items': [
+          {'productId': '1', 'quantity': 1, 'serialNumbers': []},
+        ],
+      };
+
+      expect(canUpdateDeliveryStatus(delivery, 'out_for_delivery'), isFalse);
+
+      final activeIncomplete = {
+        'status': 'active',
+        'items': [
+          {'productId': '1', 'quantity': 1, 'serialNumbers': []},
+        ],
+      };
+      expect(canUpdateDeliveryStatus(activeIncomplete, 'out_for_delivery'), isFalse);
+      expect(canUpdateDeliveryStatus(delivery, 'delivered'), isFalse);
     });
   });
 }

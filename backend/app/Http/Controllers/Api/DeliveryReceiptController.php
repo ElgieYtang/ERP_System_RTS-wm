@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\TransactionPresenter;
 use App\Models\DeliveryReceipt;
 use App\Models\Outslip;
+use App\Support\DeliverySerials;
 use App\Support\DocumentNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -111,6 +112,12 @@ class DeliveryReceiptController extends Controller
             ], 422);
         }
 
+        if ($next === 'delivered' && ! DeliverySerials::deliveryComplete($delivery->details)) {
+            return response()->json([
+                'message' => 'Capture serial numbers for all line items before marking delivered.',
+            ], 422);
+        }
+
         $delivery->status = match ($next) {
             'out_for_delivery' => 'OUT FOR DELIVERY',
             'delivered' => 'DELIVERED',
@@ -120,6 +127,81 @@ class DeliveryReceiptController extends Controller
 
         return response()->json([
             'message' => 'Delivery receipt status updated.',
+            'data' => TransactionPresenter::deliveryReceipt($delivery->fresh(['details', 'outslip'])),
+        ]);
+    }
+
+    public function updateSerials(Request $request, string $id): JsonResponse
+    {
+        $payload = $request->validate([
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.productId' => ['required', 'integer'],
+            'lines.*.serialNumbers' => ['nullable', 'array'],
+            'lines.*.serialNumbers.*' => ['string', 'max:128'],
+        ]);
+
+        $delivery = $this->findDelivery($id);
+        $status = strtoupper((string) $delivery->status);
+
+        if (in_array($status, ['DELIVERED', 'CANCELLED'], true)) {
+            return response()->json([
+                'message' => 'Serial numbers cannot be changed after delivery is completed.',
+            ], 422);
+        }
+
+        $detailsByProduct = $delivery->details->keyBy('item_id');
+        $seenSerials = [];
+
+        foreach ($payload['lines'] as $linePayload) {
+            $productId = (int) $linePayload['productId'];
+            $detail = $detailsByProduct->get($productId);
+
+            if (! $detail) {
+                return response()->json([
+                    'message' => "Product {$productId} is not on this delivery receipt.",
+                ], 422);
+            }
+
+            $serials = array_values(array_filter(array_map(
+                static fn ($value) => trim((string) $value),
+                $linePayload['serialNumbers'] ?? [],
+            )));
+
+            $needed = (int) round((float) $detail->qty);
+            if (count($serials) > $needed) {
+                return response()->json([
+                    'message' => "Too many serial numbers for {$detail->item_name} (max {$needed}).",
+                ], 422);
+            }
+
+            foreach ($serials as $serial) {
+                $key = strtolower($serial);
+                if (isset($seenSerials[$key])) {
+                    return response()->json([
+                        'message' => "Duplicate serial number: {$serial}",
+                    ], 422);
+                }
+
+                $seenSerials[$key] = true;
+            }
+        }
+
+        DB::transaction(function () use ($payload, $detailsByProduct) {
+            foreach ($payload['lines'] as $linePayload) {
+                $productId = (int) $linePayload['productId'];
+                $detail = $detailsByProduct->get($productId);
+                $serials = array_values(array_filter(array_map(
+                    static fn ($value) => trim((string) $value),
+                    $linePayload['serialNumbers'] ?? [],
+                )));
+
+                $detail->serial_no = DeliverySerials::encode($serials);
+                $detail->save();
+            }
+        });
+
+        return response()->json([
+            'message' => 'Serial numbers saved.',
             'data' => TransactionPresenter::deliveryReceipt($delivery->fresh(['details', 'outslip'])),
         ]);
     }

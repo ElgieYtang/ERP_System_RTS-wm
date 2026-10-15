@@ -8,7 +8,7 @@ function MobileCardList({
   className,
   variant = "default"
 }) {
-  if (items.length === 0) {
+  if (!items?.length) {
     return /* @__PURE__ */ jsx("div", { className: cn("rounded-lg border border-border bg-surface p-6 text-center text-sm text-text-secondary md:hidden", className), children: emptyMessage });
   }
   return /* @__PURE__ */ jsx("div", { className: cn("space-y-3 md:hidden", className), children: items.map((item) => /* @__PURE__ */ jsx(

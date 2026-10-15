@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
+import { ModuleStatusFilters } from '@/components/transactions/ModuleStatusFilters'
 import { TABLE_ACTIONS_CELL_CLASS, TABLE_ACTIONS_HEAD_CLASS, TableActions } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -93,16 +94,32 @@ export function BillingPage() {
         <p className="mb-4 text-sm text-text-secondary">Loading billing…</p>
       ) : null}
 
+      <ModuleStatusFilters
+        active={statusFilter}
+        onChange={setStatusFilter}
+        tabs={[
+          { key: 'all', label: 'All', count: billingStatements.length },
+          {
+            key: 'unpaid',
+            label: 'Unpaid',
+            count: billingStatements.filter((b) => b.paymentStatus === 'unpaid').length,
+          },
+          {
+            key: 'partially_paid',
+            label: 'Partially Paid',
+            count: billingStatements.filter((b) => b.paymentStatus === 'partially_paid').length,
+          },
+          {
+            key: 'paid',
+            label: 'Paid',
+            count: billingStatements.filter((b) => b.paymentStatus === 'paid').length,
+          },
+        ]}
+      />
+
       <TableFilters
         search={search}
         onSearchChange={setSearch}
-        statusFilter={statusFilter}
-        onStatusChange={setStatusFilter}
-        statusOptions={[
-          { value: 'unpaid', label: 'Unpaid' },
-          { value: 'partially_paid', label: 'Partially Paid' },
-          { value: 'paid', label: 'Paid' },
-        ]}
         showDateRange
         dateFrom={dateFrom}
         dateTo={dateTo}
@@ -110,6 +127,7 @@ export function BillingPage() {
         onDateToChange={setDateTo}
       />
 
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -171,6 +189,7 @@ export function BillingPage() {
           )}
         </TableBody>
       </Table>
+      </div>
 
       <Modal open={!!paymentBill} onClose={() => setPaymentId(null)} title="Record Payment" size="md">
         {paymentBill ? (

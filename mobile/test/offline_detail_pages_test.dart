@@ -9,7 +9,7 @@ import 'package:rts_erp_mobile/services/api_client.dart';
 const _offlineNotice = 'Offline — reconnect to update this record.';
 
 void main() {
-  testWidgets('offline purchase order detail hides receive items', (tester) async {
+  testWidgets('offline purchase order detail hides receive items and print', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: PurchaseOrderDetailPage(
@@ -21,6 +21,7 @@ void main() {
             'items': [],
           },
           canReceive: true,
+          offline: true,
           workflowNotice: _offlineNotice,
         ),
       ),
@@ -28,6 +29,11 @@ void main() {
 
     expect(find.text(_offlineNotice), findsOneWidget);
     expect(find.text('Receive items'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Print PDF'), findsOneWidget);
+    final printButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Print PDF'),
+    );
+    expect(printButton.onPressed, isNull);
   });
 
   testWidgets('offline quotation detail hides workflow buttons', (tester) async {

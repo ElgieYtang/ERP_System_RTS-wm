@@ -24,6 +24,7 @@ class HomePageState extends State<HomePage> {
   bool _fromCache = false;
   String? _error;
   String? _offlineLabel;
+  String? _countsWarning;
   final Map<MobileModule, int> _counts = {};
 
   @override
@@ -65,11 +66,13 @@ class HomePageState extends State<HomePage> {
   }
 
   Future<void> _load() async {
+    final wasOffline = _fromCache;
     setState(() {
       _loading = true;
       _error = null;
       _fromCache = false;
       _offlineLabel = null;
+      _countsWarning = null;
     });
 
     try {
@@ -112,6 +115,7 @@ class HomePageState extends State<HomePage> {
           ..addAll(counts);
         _loading = false;
       });
+      if (wasOffline && mounted) fieldShowBackOnlineSnackBar(context);
     } catch (error) {
       final cachedLists = await Future.wait([
         OfflineCache.loadList(OfflineCache.quotations),
@@ -146,12 +150,26 @@ class HomePageState extends State<HomePage> {
           accomplishments: cachedLists[6].rows,
         );
 
+        String? countsWarning;
+        if (!cachedLists.every((entry) => entry.savedAt != null)) {
+          countsWarning = homeCountsMismatchMessage;
+        }
+
+        final cachedStats = await OfflineCache.loadMap(OfflineCache.homeStats);
+        if (cachedStats.data != null) {
+          final statsCounts = homeModuleCountsFromStats(cachedStats.data!);
+          if (homeModuleCountsDiffer(counts, statsCounts)) {
+            countsWarning ??= homeCountsMismatchMessage;
+          }
+        }
+
         setState(() {
           _counts
             ..clear()
             ..addAll(counts);
           _fromCache = true;
           _offlineLabel = OfflineCache.staleLabel(newestSavedAt);
+          _countsWarning = countsWarning;
           _error = null;
           _loading = false;
         });
@@ -164,18 +182,10 @@ class HomePageState extends State<HomePage> {
         setState(() {
           _counts
             ..clear()
-            ..addEntries(
-              MobileModule.values
-                  .where((module) => module != MobileModule.home)
-                  .map(
-                    (module) => MapEntry(
-                      module,
-                      (cached.data![module.name] as num?)?.toInt() ?? 0,
-                    ),
-                  ),
-            );
+            ..addAll(homeModuleCountsFromStats(cached.data!));
           _fromCache = true;
           _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
+          _countsWarning = approximateHomeCountsMessage;
           _error = friendlyApiError(error);
           _loading = false;
         });
@@ -210,9 +220,15 @@ class HomePageState extends State<HomePage> {
             firstName: firstName,
             totalOpen: totalOpen,
             offlineLabel: _fromCache ? _offlineLabel : null,
+            offlineHint: _fromCache ? OfflineCache.offlineReconnectHint : null,
             error: !_fromCache ? _error : null,
             onRetry: refreshCounts,
           ),
+          if (_fromCache && _countsWarning != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: FieldPartialCacheBanner(message: _countsWarning!),
+            ),
           if (attention.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Padding(
@@ -286,6 +302,7 @@ class _DashboardHeroStrip extends StatelessWidget {
     required this.firstName,
     required this.totalOpen,
     this.offlineLabel,
+    this.offlineHint,
     this.error,
     this.onRetry,
   });
@@ -293,6 +310,7 @@ class _DashboardHeroStrip extends StatelessWidget {
   final String firstName;
   final int totalOpen;
   final String? offlineLabel;
+  final String? offlineHint;
   final String? error;
   final VoidCallback? onRetry;
 
@@ -342,7 +360,7 @@ class _DashboardHeroStrip extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (offlineLabel != null) ...[
-                      FieldOfflineBanner(label: offlineLabel!),
+                      FieldOfflineBanner(label: offlineLabel!, hint: offlineHint),
                       const SizedBox(height: 12),
                     ],
                     if (error != null) ...[

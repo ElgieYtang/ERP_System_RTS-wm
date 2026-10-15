@@ -31,7 +31,7 @@ Cleartext HTTP is allowed for debug in `android/app/src/main/AndroidManifest.xml
 ```powershell
 # Terminal 1 — API (must bind 0.0.0.0 for emulator/phone)
 cd C:\erp-system\backend
-php artisan serve --host=0.0.0.0 --port=8000
+serve-api.cmd
 
 # Terminal 2 — mobile
 cd C:\erp-system\mobile
@@ -57,7 +57,7 @@ flutter test
 
 - **Dashboard** — greeting, open-task summary, 8-module icon grid, “Needs attention” chips
 - Tap any module icon to open its list
-- **Detail screens** — open immediately with record data; workflow buttons appear after linked lists load (short “Loading workflow actions…” notice)
+- **Detail screens** — open immediately with record data; workflow buttons appear after linked lists load (short “Checking linked records…” notice)
 - **Detail screens** — back button (left) and dashboard shortcut (right)
 - **Profile** — avatar menu on dashboard (sign out)
 - No side drawer or bottom tabs
@@ -75,7 +75,7 @@ Full chain (same as web):
 | Receiving | Confirm → create outslip (requires quotation customer) or **View outslip** if one exists |
 | Outslips | Filters: **Needs action**, **For dispatch**, **Ready for DR**, **All** — new, approve, dispatch, gate pass, create DR |
 | Gate pass | From approved/for-dispatch outslip — edit transport fields, save, mark exited, print PDF |
-| Delivery receipts | Out for delivery, delivered → create billing |
+| Delivery receipts | Camera or handheld scan for product barcode + serial stickers; out for delivery; delivered (blocked until serials complete) → create billing |
 | Billing | Record payment |
 | SOA | Generate by customer + optional date range, print PDF |
 | Accomplishments | New, edit, approve, photos, PDF |
@@ -119,8 +119,46 @@ Additional offline behavior:
 - **All transaction detail screens** (from cache) show an offline notice; workflow actions are hidden
 - **Dashboard counts** recompute from cached module lists when the API is down
 - **Gate pass**: view/print may work if data was loaded; **Save** and **Mark exited** are blocked offline; pull-to-refresh and exit confirmation when online
+- **Print offline**: receiving, outslip, and billing PDFs work from cached row data; quotation, PO, and DR print need a connection; gate pass print needs the document loaded first
+- **Session expiry**: API 401 returns you to sign-in with a message
+
+**Phase 2 — deeper offline**
+
+- **Gate pass cache** — after first online load, gate pass reopens offline (view + print)
+- **Accomplishment detail** — cached report body offline; photos/edits/PDF blocked
+- **Projects cache** — project list restored with accomplishments for clearer offline errors
+- **SOA** — cached customers + last generated statement per customer/date range; print works offline from cache
+- **Reconnect hint** — offline banners say “Pull down to refresh when back online”; successful refresh shows “Back online — data updated.”
 
 Pull-to-refresh on list screens retries the API when connectivity returns.
+
+**Phase 3 — workflow edge cases**
+
+- **Partial cache banner** — when linked module lists are incomplete, lists and detail screens explain that convert/create actions stay hidden
+- **Dashboard count warnings** — recomputed list counts are preferred; approximate or mismatched summary stats show a warning banner
+- **Post-create navigation** — newly created records opened from list actions pass the offline flag when still on cached data
+- **Double-submit guards** — list actions use busy ids; gate pass warns before discarding unsaved edits on back
+
+**Phase 4 — automated tests**
+
+- Workflow notice helper, home count fallback helpers, PO/receiving rules, session expiry login banner
+- GitHub Actions workflow runs `flutter analyze lib/` and `flutter test` on mobile changes
+
+**Phase 5 — UX polish**
+
+- Accomplishments list uses the same Card + InkWell row pattern as receivings
+- Consistent partial-cache and offline banner rules across workflow modules
+- `ModuleShell` moved out of legacy `transactions_drawer.dart` into `navigation/module_shell.dart`
+
+**Phase 6 — backend enforcement (Laravel API)**
+
+See also `backend/docs/PHASE6_API_HARDENING.md`.
+
+- **Gate pass lock** — API rejects gate pass edits after **exited**
+- **Inventory on dispatch** — API checks stock before posting OUT movements
+- **Admin-only** — outslip approve/dispatch and setup writes require admin login
+- **Concurrent edits** — row locks on approve, dispatch, gate pass, receiving confirm
+- Mobile hides **Approve** / **Dispatch** for staff users (`role: staff`)
 
 ## Not on mobile
 
@@ -142,7 +180,13 @@ Run on emulator or phone with API up:
 10. **SOA** — pick customer, optional dates, generate + PDF
 11. **Accomplishment** — create, edit, approve, PDF
 12. Confirm invalid actions are hidden or blocked (e.g. convert after PO exists, create outslip without quotation customer)
-13. **Offline** — airplane mode → cached lists + banners; mutations blocked; gate pass save/exit blocked
+13. **Offline** — airplane mode → cached lists + banners; mutations blocked; partial cache banner when linked lists missing; gate pass save/exit blocked; network-only print disabled
+14. **Session** — invalidate token → app returns to login with message
+15. **Gate pass** — edit fields, press back without saving → discard confirmation
+16. **Dashboard offline** — partial cache or summary-only stats show count warning banner
+17. **Admin vs staff** — log in as staff: outslip Approve/Dispatch hidden; admin can approve/dispatch
+18. **Gate pass lock** — mark exited, then try save via API → 422
+19. **Dispatch stock** — dispatch outslip with insufficient inventory → 422 with item qty message
 
 ## Project layout
 
@@ -166,9 +210,17 @@ lib/
     transaction_workflows.dart  # Dialogs + API mutations (incl. gate pass)
     field_ui.dart               # Status chips, banners, detail scaffold
 test/
+  auth_state_test.dart
+  gate_pass_offline_test.dart
+  gate_pass_cache_test.dart
+  gate_pass_unsaved_test.dart
   home_counts_test.dart
+  home_counts_fallback_test.dart
+  login_session_test.dart
+  offline_cache_test.dart
   offline_detail_pages_test.dart
   transaction_actions_test.dart # Workflow rule unit tests
+  transaction_detail_host_test.dart
   receiving_detail_page_test.dart
   outslip_detail_page_test.dart
 ```

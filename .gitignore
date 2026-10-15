@@ -11,6 +11,10 @@ composer.phar
 # Build
 dist
 dist-ssr
+mobile/build/
+mobile/.dart_tool/
+**/.gradle/
+backend/storage/framework/cache/
 
 # Local env
 .env

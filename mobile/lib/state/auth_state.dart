@@ -62,4 +62,11 @@ class AuthState extends ChangeNotifier {
     busy = false;
     notifyListeners();
   }
+
+  void handleSessionExpired(String message) {
+    error = message;
+    busy = false;
+    bootstrapping = false;
+    notifyListeners();
+  }
 }

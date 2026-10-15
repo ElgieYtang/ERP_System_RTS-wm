@@ -103,6 +103,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         MobileModule.receiving,
         existing,
         popCurrentRoute: popCurrentRoute,
+        offline: _fromCache,
       );
       return;
     }
@@ -143,6 +144,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           MobileModule.receiving,
           receiving,
           popCurrentRoute: popCurrentRoute,
+          offline: _fromCache,
         );
       }
     } catch (error) {
@@ -183,7 +185,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             ],
             onChanged: (value) => setState(() => _filter = value),
           ),
-          if (_fromCache && _offlineLabel != null) FieldOfflineBanner(label: _offlineLabel!),
+          if (_fromCache && _offlineLabel != null)
+            FieldOfflineBanner(
+              label: _offlineLabel!,
+              hint: OfflineCache.offlineReconnectHint,
+            ),
+          if (!_lists.crossModuleRulesReliable && !_loading)
+            const FieldPartialCacheBanner(),
           if (_error != null && !_fromCache) FieldErrorBanner(message: _error!, onRetry: _load),
           if (visible.isEmpty && (_error == null || _fromCache))
             const FieldEmptyState(
@@ -255,6 +263,7 @@ class PurchaseOrderDetailPage extends StatelessWidget {
     this.onReceive,
     this.workflowNotice,
     this.workflowNoticeLoading = false,
+    this.offline = false,
   });
 
   final ApiClient api;
@@ -263,6 +272,7 @@ class PurchaseOrderDetailPage extends StatelessWidget {
   final Future<void> Function()? onReceive;
   final String? workflowNotice;
   final bool workflowNoticeLoading;
+  final bool offline;
 
   @override
   Widget build(BuildContext context) {
@@ -281,6 +291,7 @@ class PurchaseOrderDetailPage extends StatelessWidget {
         PrintDocumentButton(
           onPrint: () => printPurchaseOrder(context, api, order),
           label: 'Print PDF',
+          enabled: !offline,
         ),
       ],
       primaryActions: [

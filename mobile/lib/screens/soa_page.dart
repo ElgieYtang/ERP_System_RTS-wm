@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
 import '../services/api_errors.dart';
+import '../services/offline_cache.dart';
 import '../theme/app_theme.dart';
 import '../widgets/field_ui.dart';
 import '../widgets/print_document_button.dart';
@@ -18,7 +19,9 @@ class SoaPage extends StatefulWidget {
 class _SoaPageState extends State<SoaPage> {
   bool _loadingCustomers = true;
   bool _loadingSoa = false;
+  bool _fromCache = false;
   String? _error;
+  String? _offlineLabel;
   List<Map<String, dynamic>> _customers = [];
   String? _customerId;
   DateTime? _dateFrom;
@@ -36,6 +39,10 @@ class _SoaPageState extends State<SoaPage> {
   }
 
   Future<void> _pickDate({required bool isFrom}) async {
+    if (_fromCache) {
+      fieldShowOfflineBlocked(context);
+      return;
+    }
     final initial = isFrom ? _dateFrom : _dateTo;
     final picked = await showDatePicker(
       context: context,
@@ -60,13 +67,17 @@ class _SoaPageState extends State<SoaPage> {
   }
 
   Future<void> _loadCustomers() async {
+    final wasOffline = _fromCache;
     setState(() {
       _loadingCustomers = true;
       _error = null;
+      _fromCache = false;
+      _offlineLabel = null;
     });
     try {
       final data = await widget.api.getList('/setup/customers');
       final rows = data.cast<Map<String, dynamic>>();
+      await OfflineCache.saveList(OfflineCache.soaCustomers, rows);
       if (!mounted) return;
       setState(() {
         _customers = rows.where((c) => c['status'] != 'Inactive').toList();
@@ -76,12 +87,27 @@ class _SoaPageState extends State<SoaPage> {
       if (_customerId != null) {
         await _loadSoa();
       }
+      if (wasOffline && mounted) fieldShowBackOnlineSnackBar(context);
     } catch (error) {
+      final cached = await OfflineCache.loadList(OfflineCache.soaCustomers);
       if (!mounted) return;
-      setState(() {
-        _error = friendlyApiError(error);
-        _loadingCustomers = false;
-      });
+      if (cached.rows.isNotEmpty) {
+        setState(() {
+          _customers = cached.rows.where((c) => c['status'] != 'Inactive').toList();
+          _customerId ??= _customers.isNotEmpty ? _customers.first['id']?.toString() : null;
+          _fromCache = true;
+          _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
+          _loadingCustomers = false;
+        });
+        if (_customerId != null) {
+          await _loadSoa();
+        }
+      } else {
+        setState(() {
+          _error = friendlyApiError(error);
+          _loadingCustomers = false;
+        });
+      }
     }
   }
 
@@ -89,14 +115,30 @@ class _SoaPageState extends State<SoaPage> {
     final customerId = _customerId;
     if (customerId == null || customerId.isEmpty) return;
 
+    final from = _formatApiDate(_dateFrom);
+    final to = _formatApiDate(_dateTo);
+    final wasOffline = _fromCache;
+
     setState(() {
       _loadingSoa = true;
-      _error = null;
+      if (!wasOffline) _error = null;
     });
+
+    if (_fromCache) {
+      final cached = await OfflineCache.loadSoaReport(customerId, from: from, to: to);
+      if (!mounted) return;
+      if (cached.data != null) {
+        setState(() {
+          _account = cached.data;
+          _loadingSoa = false;
+          _offlineLabel ??= OfflineCache.staleLabel(cached.savedAt);
+        });
+        return;
+      }
+    }
+
     try {
       final query = <String, String>{'customerId': customerId};
-      final from = _formatApiDate(_dateFrom);
-      final to = _formatApiDate(_dateTo);
       if (from != null) query['from'] = from;
       if (to != null) query['to'] = to;
 
@@ -104,18 +146,34 @@ class _SoaPageState extends State<SoaPage> {
         '/reports/soa',
         query: query,
       );
+      await OfflineCache.saveSoaReport(customerId, from: from, to: to, account: data);
       if (!mounted) return;
       setState(() {
         _account = data;
         _loadingSoa = false;
       });
+      if (wasOffline && mounted) fieldShowBackOnlineSnackBar(context);
     } catch (error) {
+      final cached = await OfflineCache.loadSoaReport(customerId, from: from, to: to);
       if (!mounted) return;
-      setState(() {
-        _error = friendlyApiError(error);
-        _loadingSoa = false;
-      });
+      if (cached.data != null) {
+        setState(() {
+          _account = cached.data;
+          _fromCache = true;
+          _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
+          _loadingSoa = false;
+        });
+      } else {
+        setState(() {
+          _error = friendlyApiError(error);
+          _loadingSoa = false;
+        });
+      }
     }
+  }
+
+  Future<void> _refreshAll() async {
+    await _loadCustomers();
   }
 
   @override
@@ -141,12 +199,17 @@ class _SoaPageState extends State<SoaPage> {
         );
 
     return RefreshIndicator(
-      onRefresh: _loadSoa,
+      onRefresh: _refreshAll,
       color: AppTheme.maroon,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(12),
         children: [
+          if (_fromCache && _offlineLabel != null)
+            FieldOfflineBanner(
+              label: _offlineLabel!,
+              hint: OfflineCache.offlineReconnectHint,
+            ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -170,10 +233,12 @@ class _SoaPageState extends State<SoaPage> {
                           ),
                         )
                         .toList(),
-                    onChanged: (value) {
-                      setState(() => _customerId = value);
-                      _loadSoa();
-                    },
+                    onChanged: _fromCache
+                        ? null
+                        : (value) {
+                            setState(() => _customerId = value);
+                            _loadSoa();
+                          },
                   ),
                   const SizedBox(height: 12),
                   const Text('Date range (optional)', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -182,7 +247,7 @@ class _SoaPageState extends State<SoaPage> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _pickDate(isFrom: true),
+                          onPressed: _fromCache ? null : () => _pickDate(isFrom: true),
                           icon: const Icon(Icons.calendar_today_outlined, size: 18),
                           label: Text('From: ${_formatDisplayDate(_dateFrom)}'),
                         ),
@@ -190,7 +255,7 @@ class _SoaPageState extends State<SoaPage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _pickDate(isFrom: false),
+                          onPressed: _fromCache ? null : () => _pickDate(isFrom: false),
                           icon: const Icon(Icons.event_outlined, size: 18),
                           label: Text('To: ${_formatDisplayDate(_dateTo)}'),
                         ),
@@ -202,20 +267,22 @@ class _SoaPageState extends State<SoaPage> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _dateFrom = null;
-                            _dateTo = null;
-                          });
-                          _loadSoa();
-                        },
+                        onPressed: _fromCache
+                            ? null
+                            : () {
+                                setState(() {
+                                  _dateFrom = null;
+                                  _dateTo = null;
+                                });
+                                _loadSoa();
+                              },
                         child: const Text('Clear dates'),
                       ),
                     ),
                   ],
                   const SizedBox(height: 12),
                   FilledButton(
-                    onPressed: _loadingSoa ? null : _loadSoa,
+                    onPressed: _fromCache || _loadingSoa ? null : _loadSoa,
                     child: Text(_loadingSoa ? 'Loading…' : 'Generate SOA'),
                   ),
                   if (_account != null && customer != null) ...[
@@ -229,7 +296,7 @@ class _SoaPageState extends State<SoaPage> {
               ),
             ),
           ),
-          if (_error != null) FieldErrorBanner(message: _error!, onRetry: _loadSoa),
+          if (_error != null && !_fromCache) FieldErrorBanner(message: _error!, onRetry: _loadSoa),
           if (customer != null) ...[
             Card(
               child: Padding(
@@ -260,7 +327,7 @@ class _SoaPageState extends State<SoaPage> {
               ),
             ),
           ],
-          if (rows.isEmpty && !_loadingSoa && _error == null)
+          if (rows.isEmpty && !_loadingSoa && _error == null && !_fromCache)
             const FieldEmptyState(
               icon: Icons.account_balance_wallet_outlined,
               title: 'No SOA entries',

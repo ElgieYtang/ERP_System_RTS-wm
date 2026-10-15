@@ -27,6 +27,7 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
   bool _loading = true;
   bool _creating = false;
   bool _fromCache = false;
+  String? _busyId;
   String? _error;
   String? _offlineLabel;
   List<Map<String, dynamic>> _rows = [];
@@ -39,6 +40,7 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
   }
 
   Future<void> _load() async {
+    final wasOffline = _fromCache;
     setState(() {
       _loading = true;
       _error = null;
@@ -49,6 +51,7 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
       final reports = await widget.api.getList('/accomplishments');
       final projects = await widget.api.getList('/setup/projects');
       await OfflineCache.saveList(OfflineCache.accomplishments, reports);
+      await OfflineCache.saveList(OfflineCache.projects, projects);
       if (!mounted) return;
       setState(() {
         _rows = reports
@@ -58,15 +61,18 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
         _projects = projects.cast<Map<String, dynamic>>();
         _loading = false;
       });
+      if (wasOffline && mounted) fieldShowBackOnlineSnackBar(context);
     } catch (error) {
       final cached = await OfflineCache.loadList(OfflineCache.accomplishments);
+      final cachedProjects = await OfflineCache.loadList(OfflineCache.projects);
       if (!mounted) return;
       if (cached.rows.isNotEmpty) {
         setState(() {
           _rows = cached.rows.where((r) => r['status'] != 'inactive').toList();
+          _projects = cachedProjects.rows;
           _fromCache = true;
           _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
-          _error = friendlyApiError(error);
+          _error = null;
           _loading = false;
         });
       } else {
@@ -86,7 +92,7 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
     }
     if (_projects.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No projects')),
+        const SnackBar(content: Text('No projects available. Connect to load projects.')),
       );
       return;
     }
@@ -177,12 +183,14 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
 
   Future<void> _approve(Map<String, dynamic> row) async {
     if (_fromCache) {
-    fieldShowOfflineBlocked(context);
+      fieldShowOfflineBlocked(context);
       return;
     }
-    final id = row['dbId']?.toString() ?? row['id']?.toString();
-    if (id == null) return;
+    final id = fieldRowId(row);
+    if (id.isEmpty || _busyId != null) return;
+    if (!canApproveAccomplishment(row)) return;
 
+    setState(() => _busyId = id);
     try {
       await widget.api.put('/accomplishments/$id', {'status': 'approved'});
       if (!mounted) return;
@@ -191,6 +199,8 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyApiError(error))));
+    } finally {
+      if (mounted) setState(() => _busyId = null);
     }
   }
 
@@ -212,7 +222,11 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(12),
           children: [
-            if (_fromCache && _offlineLabel != null) FieldOfflineBanner(label: _offlineLabel!),
+            if (_fromCache && _offlineLabel != null)
+              FieldOfflineBanner(
+                label: _offlineLabel!,
+                hint: OfflineCache.offlineReconnectHint,
+              ),
             if (_error != null && !_fromCache) FieldErrorBanner(message: _error!, onRetry: _load),
             if (_rows.isEmpty && (_error == null || _fromCache))
               const FieldEmptyState(
@@ -220,23 +234,14 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
                 title: 'No reports yet',
               ),
             ..._rows.map((row) {
+              final id = fieldRowId(row);
               final imageCount = (row['images'] as List<dynamic>? ?? const []).length;
               final status = row['status']?.toString() ?? '';
               final canApprove = canApproveAccomplishment(row) && !_fromCache;
+              final busy = _busyId == id;
+
               return Card(
-                child: ListTile(
-                  title: Text(row['id']?.toString() ?? 'AR'),
-                  subtitle: Text(
-                    '${row['projectName'] ?? '—'}\n'
-                    '${row['displayDate'] ?? row['date'] ?? '—'} · $imageCount photo(s)',
-                  ),
-                  isThreeLine: true,
-                  trailing: canApprove
-                      ? FilledButton(
-                          onPressed: () => _approve(row),
-                          child: const Text('Approve'),
-                        )
-                      : FieldStatusChip(status),
+                child: InkWell(
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
@@ -245,12 +250,47 @@ class _AccomplishmentsPageState extends State<AccomplishmentsPage> {
                           AccomplishmentDetailPage(
                             api: widget.api,
                             reportId: row['dbId']?.toString() ?? row['id'].toString(),
+                            offline: _fromCache,
+                            initialReport: row,
+                            offlineLabel: _offlineLabel,
                           ),
                         ),
                       ),
                     );
                     await _load();
                   },
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                row['id']?.toString() ?? 'AR',
+                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                              ),
+                            ),
+                            if (!canApprove) FieldStatusChip(status),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${row['projectName'] ?? '—'} · '
+                          '${row['displayDate'] ?? row['date'] ?? '—'}',
+                        ),
+                        Text('$imageCount photo(s)'),
+                        if (canApprove) ...[
+                          const SizedBox(height: 8),
+                          FilledButton(
+                            onPressed: busy ? null : () => _approve(row),
+                            child: Text(busy ? 'Approving…' : 'Approve'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               );
             }),
@@ -267,10 +307,16 @@ class AccomplishmentDetailPage extends StatefulWidget {
     super.key,
     required this.api,
     required this.reportId,
+    this.offline = false,
+    this.initialReport,
+    this.offlineLabel,
   });
 
   final ApiClient api;
   final String reportId;
+  final bool offline;
+  final Map<String, dynamic>? initialReport;
+  final String? offlineLabel;
 
   @override
   State<AccomplishmentDetailPage> createState() => _AccomplishmentDetailPageState();
@@ -328,11 +374,38 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
     _load();
   }
 
+  Future<bool> _loadFromCacheOrInitial() async {
+    final cached = await OfflineCache.loadAccomplishmentDetail(widget.reportId);
+    final report = cached.data ?? widget.initialReport;
+    if (report == null || !mounted) return false;
+    setState(() {
+      _report = Map<String, dynamic>.from(report);
+      _photoBytes.clear();
+      _clampPhotoPage();
+      _loading = false;
+      _error = null;
+    });
+    return true;
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
+
+    if (widget.offline) {
+      final loaded = await _loadFromCacheOrInitial();
+      if (!mounted) return;
+      if (!loaded) {
+        setState(() {
+          _error = 'Report details are not saved offline yet. Connect to load this report.';
+          _loading = false;
+        });
+      }
+      return;
+    }
+
     try {
       final report = await widget.api.getOne('/accomplishments/${widget.reportId}');
       final images =
@@ -348,6 +421,7 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
           // Skip broken photo.
         }
       }
+      await OfflineCache.saveAccomplishmentDetail(widget.reportId, report);
       if (!mounted) return;
       setState(() {
         _report = report;
@@ -358,7 +432,9 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
         _loading = false;
       });
     } catch (error) {
+      final loaded = await _loadFromCacheOrInitial();
       if (!mounted) return;
+      if (loaded) return;
       setState(() {
         _error = friendlyApiError(error);
         _loading = false;
@@ -367,6 +443,10 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
   }
 
   Future<void> _pickAndUpload(ImageSource source) async {
+    if (widget.offline) {
+      fieldShowOfflineBlocked(context);
+      return;
+    }
     if (_uploading) return;
     final picker = ImagePicker();
     final files = source == ImageSource.gallery
@@ -422,6 +502,10 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
   Future<void> _exportPdf() async {
     final report = _report;
     if (report == null || _exportingPdf) return;
+    if (widget.offline) {
+      fieldShowOfflineBlocked(context);
+      return;
+    }
 
     setState(() => _exportingPdf = true);
     try {
@@ -444,6 +528,10 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
   Future<void> _editReport() async {
     final report = _report;
     if (report == null || !canEditAccomplishment(report)) return;
+    if (widget.offline) {
+      fieldShowOfflineBlocked(context);
+      return;
+    }
 
     final result = await showDialog<({DateTime date, String remarks})>(
       context: context,
@@ -475,6 +563,10 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
   }
 
   Future<void> _deletePhoto(String photoId) async {
+    if (widget.offline) {
+      fieldShowOfflineBlocked(context);
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -523,6 +615,24 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (widget.offline && widget.offlineLabel != null)
+                      FieldOfflineBanner(
+                        label: widget.offlineLabel!,
+                        hint: OfflineCache.offlineReconnectHint,
+                      ),
+                    if (widget.offline)
+                      const Card(
+                        color: AppTheme.maroonLight,
+                        margin: EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.info_outline_rounded, color: AppTheme.maroon),
+                          title: Text(
+                            'Offline — photos and edits need a connection.',
+                            style: TextStyle(fontSize: 13, height: 1.35),
+                          ),
+                        ),
+                      ),
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -576,49 +686,51 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
                         padding: const EdgeInsets.all(16),
                         child: FieldDetailActions(
                           secondary: [
-                            if (canEditAccomplishment(report))
+                            if (!widget.offline && canEditAccomplishment(report))
                               OutlinedButton.icon(
                                 onPressed: _editReport,
                                 icon: const Icon(Icons.edit_outlined),
                                 label: const Text('Edit report'),
                               ),
-                            OutlinedButton.icon(
-                              onPressed: _exportingPdf ? null : _exportPdf,
-                              icon: _exportingPdf
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.picture_as_pdf_outlined),
-                              label: Text(_exportingPdf ? 'Creating PDF…' : 'Print PDF'),
-                            ),
+                            if (!widget.offline)
+                              OutlinedButton.icon(
+                                onPressed: _exportingPdf ? null : _exportPdf,
+                                icon: _exportingPdf
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.picture_as_pdf_outlined),
+                                label: Text(_exportingPdf ? 'Creating PDF…' : 'Print PDF'),
+                              ),
                           ],
                           primary: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: FilledButton.icon(
-                                    onPressed: _uploading
-                                        ? null
-                                        : () => _pickAndUpload(ImageSource.camera),
-                                    icon: const Icon(Icons.photo_camera),
-                                    label: const Text('Camera'),
+                            if (!widget.offline)
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: FilledButton.icon(
+                                      onPressed: _uploading
+                                          ? null
+                                          : () => _pickAndUpload(ImageSource.camera),
+                                      icon: const Icon(Icons.photo_camera),
+                                      label: const Text('Camera'),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: FilledButton.tonalIcon(
-                                    onPressed: _uploading
-                                        ? null
-                                        : () => _pickAndUpload(ImageSource.gallery),
-                                    icon: const Icon(Icons.photo_library),
-                                    label: const Text('Gallery'),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: FilledButton.tonalIcon(
+                                      onPressed: _uploading
+                                          ? null
+                                          : () => _pickAndUpload(ImageSource.gallery),
+                                      icon: const Icon(Icons.photo_library),
+                                      label: const Text('Gallery'),
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            if (_uploading) ...[
+                                ],
+                              ),
+                            if (!widget.offline && _uploading) ...[
                               const SizedBox(height: 12),
                               const LinearProgressIndicator(),
                               const SizedBox(height: 6),
@@ -683,7 +795,7 @@ class _AccomplishmentDetailPageState extends State<AccomplishmentDetailPage> {
                                     backgroundColor: Colors.black54,
                                     minimumSize: const Size(32, 32),
                                   ),
-                                  onPressed: () => _deletePhoto(entry.key),
+                                  onPressed: widget.offline ? null : () => _deletePhoto(entry.key),
                                   icon: const Icon(Icons.close, color: Colors.white, size: 16),
                                 ),
                               ),

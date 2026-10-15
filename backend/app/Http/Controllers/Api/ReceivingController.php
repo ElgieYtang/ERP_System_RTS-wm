@@ -9,6 +9,7 @@ use App\Models\PurchaseOrder;
 use App\Models\Receiving;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ReceivingController extends Controller
 {
@@ -34,16 +35,22 @@ class ReceivingController extends Controller
 
     public function confirm(string $id): JsonResponse
     {
-        $receiving = $this->findReceiving($id);
+        $result = DB::transaction(function () use ($id) {
+            $receiving = $this->findReceivingForUpdate($id);
 
-        if (strtoupper((string) $receiving->status) === 'COMPLETED') {
-            return response()->json([
-                'message' => 'Receiving is already completed.',
-                'data' => TransactionPresenter::receiving($receiving),
-            ]);
-        }
+            if (strtoupper((string) $receiving->status) === 'COMPLETED') {
+                return [
+                    'alreadyCompleted' => true,
+                    'receiving' => $receiving,
+                ];
+            }
 
-        DB::transaction(function () use ($receiving) {
+            if ($this->receivingInventoryAlreadyPosted($receiving)) {
+                throw ValidationException::withMessages([
+                    'receiving' => 'Receiving inventory has already been posted.',
+                ]);
+            }
+
             foreach ($receiving->details as $line) {
                 InventoryMovement::query()->create([
                     'branch_id' => $receiving->branch_id ?: 1,
@@ -64,12 +71,43 @@ class ReceivingController extends Controller
                     ->where('id', $receiving->po_id)
                     ->update(['status' => 'COMPLETED']);
             }
+
+            return [
+                'alreadyCompleted' => false,
+                'receiving' => $receiving->fresh(['details', 'purchaseOrder.details']),
+            ];
         });
+
+        if ($result['alreadyCompleted']) {
+            return response()->json([
+                'message' => 'Receiving is already completed.',
+                'data' => TransactionPresenter::receiving($result['receiving']),
+            ]);
+        }
 
         return response()->json([
             'message' => 'Receiving completed successfully. Inventory has been updated.',
-            'data' => TransactionPresenter::receiving($receiving->fresh(['details', 'purchaseOrder.details'])),
+            'data' => TransactionPresenter::receiving($result['receiving']),
         ]);
+    }
+
+    private function receivingInventoryAlreadyPosted(Receiving $receiving): bool
+    {
+        return InventoryMovement::query()
+            ->where('trans_type', 'RECEIVING')
+            ->where('trans_id', $receiving->id)
+            ->exists();
+    }
+
+    private function findReceivingForUpdate(string $id): Receiving
+    {
+        $query = Receiving::query()->with(['details', 'purchaseOrder.details']);
+
+        if (is_numeric($id)) {
+            return $query->lockForUpdate()->findOrFail((int) $id);
+        }
+
+        return $query->where('receiving_no', $id)->lockForUpdate()->firstOrFail();
     }
 
     private function findReceiving(string $id): Receiving

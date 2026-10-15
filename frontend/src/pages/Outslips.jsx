@@ -1,4 +1,4 @@
-import { StatusTabs } from '@/components/layout/Breadcrumbs'
+import { ModuleStatusFilters } from '@/components/transactions/ModuleStatusFilters'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TABLE_ACTIONS_CELL_CLASS, TABLE_ACTIONS_HEAD_CLASS, TableActions } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/table'
 import { EmptyState, TableFilters } from '@/components/ui/table-filters'
 import { useDemo } from '@/context/DemoContext'
+import { useAuth } from '@/context/AuthContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useSetupResource } from '@/hooks/useSetupResource'
@@ -25,6 +26,12 @@ import { filterByDateRange } from '@/lib/dateFilter'
 import { formatCurrency } from '@/lib/format'
 import { canPrintGatePass } from '@/lib/gatePass'
 import { getStatusDisplay } from '@/lib/status'
+import {
+  canApproveOutslipForUser,
+  canCreateDrFromOutslip,
+  canDispatchOutslipForUser,
+  findDrForOutslip,
+} from '@/lib/transactionRules'
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -41,9 +48,11 @@ function outslipUsesReceiving(outslip, receiving) {
 
 export function OutslipsPage() {
   const { showToast } = useDemo()
+  const { user } = useAuth()
   const {
     outslips,
     receivings,
+    deliveryReceipts,
     loading,
     createOutslip,
     approveOutslip,
@@ -62,6 +71,7 @@ export function OutslipsPage() {
   const [statusTab, setStatusTab] = useState('all')
   const [viewId, setViewId] = useState(null)
   const [dispatchId, setDispatchId] = useState(null)
+  const [createDrId, setCreateDrId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [createOpen, setCreateOpen] = useState(Boolean(receivingFromUrl))
   const [createForm, setCreateForm] = useState({
@@ -210,7 +220,8 @@ export function OutslipsPage() {
     try {
       const drId = await createDeliveryFromOutslip(osId)
       showToast('success', 'Delivery Receipt created successfully.')
-      if (drId) navigate('/delivery-receipt')
+      setCreateDrId(null)
+      if (drId) navigate(`/delivery-receipt/${drId}`)
     } catch (caught) {
       showToast('error', caught?.message ?? 'Could not create delivery receipt.')
     } finally {
@@ -243,7 +254,7 @@ export function OutslipsPage() {
         <p className="mb-4 text-sm text-text-secondary">Loading outslips…</p>
       ) : null}
 
-      <StatusTabs
+      <ModuleStatusFilters
         active={statusTab}
         onChange={setStatusTab}
         tabs={[
@@ -518,19 +529,31 @@ export function OutslipsPage() {
             </Table>
 
             <div className="flex flex-col gap-3 border-t border-border pt-4">
-              {viewOs.status === 'pending' ? (
+              {canApproveOutslipForUser(viewOs, user) ? (
                 <Button disabled={busy} onClick={() => handleApprove(viewOs.id)}>
                   Approve
                 </Button>
               ) : null}
-              {viewOs.status === 'approved' ? (
+              {canDispatchOutslipForUser(viewOs, user) ? (
                 <Button disabled={busy} onClick={() => setDispatchId(viewOs.id)}>
                   For Dispatch
                 </Button>
               ) : null}
-              {(viewOs.status === 'for_dispatch' || viewOs.status === 'released') ? (
-                <Button disabled={busy} onClick={() => handleCreateDR(viewOs.id)}>
+              {canCreateDrFromOutslip(viewOs, deliveryReceipts) ? (
+                <Button disabled={busy} onClick={() => setCreateDrId(viewOs.id)}>
                   Create Delivery Receipt
+                </Button>
+              ) : null}
+              {findDrForOutslip(viewOs, deliveryReceipts) ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    const dr = findDrForOutslip(viewOs, deliveryReceipts)
+                    setViewId(null)
+                    navigate(`/delivery-receipt/${dr.id}`)
+                  }}
+                >
+                  View Delivery Receipt
                 </Button>
               ) : null}
               {canPrintGatePass(viewOs.status) ? (
@@ -557,6 +580,17 @@ export function OutslipsPage() {
         confirmLabel="Confirm"
         onConfirm={() => {
           if (dispatchId) handleDispatch(dispatchId)
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!createDrId}
+        onClose={() => setCreateDrId(null)}
+        title="Create delivery receipt?"
+        message="Create a delivery receipt from this outslip?"
+        confirmLabel="Create DR"
+        onConfirm={() => {
+          if (createDrId) handleCreateDR(createDrId)
         }}
       />
     </div>

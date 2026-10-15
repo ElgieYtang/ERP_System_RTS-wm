@@ -10,6 +10,25 @@ JSON API at `/api/*` for the React office UI (and later Flutter).
 
 ## Setup
 
+### Windows (PHP not on PATH)
+
+From `backend\`, use the `.cmd` wrappers — they find WAMP PHP automatically (or set env var `ERP_PHP` to your `php.exe`):
+
+```bat
+cd C:\erp-system\backend
+install-deps.cmd
+copy .env.example .env
+rem Set DB_* for rts_system in .env
+artisan.cmd key:generate
+artisan.cmd storage:link
+artisan.cmd erp:hash-passwords
+serve-api.cmd
+```
+
+`serve-api.cmd` runs `artisan serve --host=0.0.0.0 --port=8000` (needed for Android emulator / phone).
+
+### PowerShell (explicit PHP path)
+
 ```powershell
 $php = "C:\wamp64\bin\php\php8.3.28\php.exe"
 cd backend

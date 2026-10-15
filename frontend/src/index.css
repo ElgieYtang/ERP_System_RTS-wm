@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/magsayo-documents.css";
 
 @theme {
   --color-maroon: #8B1E3F;
@@ -43,6 +44,31 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+html.login-route,
+html.login-route body,
+html.login-route #root {
+  min-height: 100%;
+  height: auto;
+}
+
+@media (min-width: 1024px) {
+  html.login-route,
+  html.login-route body,
+  html.login-route #root {
+    overflow: hidden;
+    height: 100%;
+  }
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Keep autofill inputs white (browsers default to yellow) */
@@ -762,10 +788,24 @@ input.login-field:-webkit-autofill:active {
   }
 
   .quotation-print-page > .quotation-print,
+  .quotation-print-page > .quotation-page,
+  .quotation-print-page > .po-page,
+  .quotation-print-page > .dr-document,
+  .quotation-print-page > .outslip-document,
   .quotation-print-page > .ar-print {
     transform: scale(var(--print-scale));
     transform-origin: top center;
     margin-bottom: calc(var(--print-a4-height) * (var(--print-scale) - 1));
+  }
+}
+
+@media screen {
+  .quotation-print-page > .quotation-page,
+  .quotation-print-page > .po-page,
+  .quotation-print-page > .dr-document,
+  .quotation-print-page > .outslip-document {
+    box-shadow: 0 8px 30px rgb(0 0 0 / 12%);
+    margin-bottom: 1.5rem;
   }
 }
 
@@ -1776,4 +1816,77 @@ input.login-field:-webkit-autofill:active {
 .gate-pass-print__footer-hint,
 .gate-pass-print__exit-time {
   font-size: 12px;
+}
+
+.report-upload-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.report-upload-pagination-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #8b1e3f;
+  background: #fff;
+  border: 1px solid #8b1e3f;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.report-upload-pagination-nav:hover:not(:disabled) {
+  background: #fdf2f4;
+}
+
+.report-upload-pagination-nav:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.report-upload-pagination-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.report-upload-pagination-page {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #8b1e3f;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.report-upload-pagination-page:hover {
+  background: #fdf2f4;
+  border-color: #8b1e3f;
+}
+
+.report-upload-pagination-page--active {
+  color: #fff;
+  background: #8b1e3f;
+  border-color: #8b1e3f;
+}
+
+.report-upload-pagination-page--active:hover {
+  color: #fff;
+  background: #7a1a37;
+  border-color: #7a1a37;
 }

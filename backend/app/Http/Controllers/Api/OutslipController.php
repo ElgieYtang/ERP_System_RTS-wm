@@ -12,6 +12,7 @@ use App\Models\Receiving;
 use App\Models\SetupCustomer;
 use App\Models\SetupItem;
 use App\Support\DocumentNumber;
+use App\Support\InventoryStock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -108,35 +109,65 @@ class OutslipController extends Controller
 
     public function approve(Request $request, string $id): JsonResponse
     {
-        $outslip = $this->findOutslip($id);
-
-        if (strtoupper((string) $outslip->status) !== 'PENDING') {
-            return response()->json(['message' => 'Only pending outslips can be approved.'], 422);
-        }
-
         $user = $request->attributes->get('auth_user');
-        $outslip->status = 'APPROVED';
-        $outslip->prepared_by = $outslip->prepared_by ?: ($user?->id ?? 0);
-        $outslip->save();
+
+        $outslip = DB::transaction(function () use ($id, $user) {
+            $outslip = $this->findOutslipForUpdate($id);
+
+            if (strtoupper((string) $outslip->status) !== 'PENDING') {
+                throw ValidationException::withMessages([
+                    'outslip' => 'Only pending outslips can be approved.',
+                ]);
+            }
+
+            $outslip->status = 'APPROVED';
+            $outslip->prepared_by = $outslip->prepared_by ?: ($user?->id ?? 0);
+            $outslip->save();
+
+            return $outslip->fresh('details');
+        });
 
         return response()->json([
             'message' => 'Outslip approved.',
-            'data' => TransactionPresenter::outslip($outslip->fresh('details')),
+            'data' => TransactionPresenter::outslip($outslip),
         ]);
     }
 
     public function dispatch(string $id): JsonResponse
     {
-        $outslip = $this->findOutslip($id);
+        $outslip = DB::transaction(function () use ($id) {
+            $outslip = $this->findOutslipForUpdate($id);
 
-        if (strtoupper((string) $outslip->status) !== 'APPROVED') {
-            return response()->json(['message' => 'Only approved outslips can be marked for dispatch.'], 422);
-        }
+            if (strtoupper((string) $outslip->status) !== 'APPROVED') {
+                throw ValidationException::withMessages([
+                    'outslip' => 'Only approved outslips can be marked for dispatch.',
+                ]);
+            }
 
-        DB::transaction(function () use ($outslip) {
+            if ($this->outslipInventoryAlreadyPosted($outslip)) {
+                throw ValidationException::withMessages([
+                    'outslip' => 'This outslip has already been dispatched.',
+                ]);
+            }
+
+            $branchId = $outslip->branch_id ?: 1;
+
+            foreach ($outslip->details as $line) {
+                $itemId = (int) $line->item_id;
+                $needed = (float) $line->qty;
+                $available = InventoryStock::quantityForItem($itemId, $branchId);
+
+                if ($available < $needed) {
+                    $name = $line->item_name ?? 'Item '.$itemId;
+                    throw ValidationException::withMessages([
+                        'inventory' => "{$name}: need {$needed}, available {$available}.",
+                    ]);
+                }
+            }
+
             foreach ($outslip->details as $line) {
                 InventoryMovement::query()->create([
-                    'branch_id' => $outslip->branch_id ?: 1,
+                    'branch_id' => $branchId,
                     'item_id' => $line->item_id,
                     'trans_id' => $outslip->id,
                     'trans_date' => $outslip->outslip_date?->toDateString() ?? now()->toDateString(),
@@ -148,11 +179,13 @@ class OutslipController extends Controller
 
             $outslip->status = 'FOR_DISPATCH';
             $outslip->save();
+
+            return $outslip->fresh(['details', 'gatePass']);
         });
 
         return response()->json([
             'message' => 'Outslip marked for dispatch. Inventory has been updated.',
-            'data' => TransactionPresenter::outslip($outslip->fresh(['details', 'gatePass'])),
+            'data' => TransactionPresenter::outslip($outslip),
         ]);
     }
 
@@ -182,21 +215,27 @@ class OutslipController extends Controller
         ]);
 
         $user = $request->attributes->get('auth_user');
-        $gatePass = $this->findOrCreateGatePass($outslip);
 
-        $gatePass->fill([
-            'vehicle_no' => $payload['vehicleNo'] ?? $gatePass->vehicle_no,
-            'driver_name' => $payload['driverName'] ?? $gatePass->driver_name,
-            'plate_no' => $payload['plateNo'] ?? $gatePass->plate_no,
-            'destination' => $payload['destination'] ?? $gatePass->destination,
-            'remarks' => $payload['remarks'] ?? $gatePass->remarks,
-            'prepared_by' => $gatePass->prepared_by ?: ($user?->id ?? 0),
-        ]);
-        $gatePass->save();
+        $document = DB::transaction(function () use ($outslip, $payload, $user) {
+            $gatePass = $this->findOrCreateGatePassForUpdate($outslip);
+            $this->assertGatePassEditable($gatePass);
+
+            $gatePass->fill([
+                'vehicle_no' => $payload['vehicleNo'] ?? $gatePass->vehicle_no,
+                'driver_name' => $payload['driverName'] ?? $gatePass->driver_name,
+                'plate_no' => $payload['plateNo'] ?? $gatePass->plate_no,
+                'destination' => $payload['destination'] ?? $gatePass->destination,
+                'remarks' => $payload['remarks'] ?? $gatePass->remarks,
+                'prepared_by' => $gatePass->prepared_by ?: ($user?->id ?? 0),
+            ]);
+            $gatePass->save();
+
+            return TransactionPresenter::gatePassDocument($outslip, $gatePass->fresh());
+        });
 
         return response()->json([
             'message' => 'Gate pass updated.',
-            'data' => TransactionPresenter::gatePassDocument($outslip, $gatePass->fresh()),
+            'data' => $document,
         ]);
     }
 
@@ -205,19 +244,68 @@ class OutslipController extends Controller
         $outslip = $this->findOutslip($id);
         $this->assertGatePassAllowed($outslip);
 
-        $gatePass = $this->findOrCreateGatePass($outslip);
+        $document = DB::transaction(function () use ($outslip) {
+            $gatePass = $this->findOrCreateGatePassForUpdate($outslip);
+            $this->assertGatePassEditable($gatePass);
 
-        if (strtoupper((string) $gatePass->status) === 'EXITED') {
-            return response()->json(['message' => 'Gate pass already marked as exited.'], 422);
-        }
+            $gatePass->status = 'EXITED';
+            $gatePass->exit_at = now();
+            $gatePass->save();
 
-        $gatePass->status = 'EXITED';
-        $gatePass->exit_at = now();
-        $gatePass->save();
+            return TransactionPresenter::gatePassDocument($outslip, $gatePass->fresh());
+        });
 
         return response()->json([
             'message' => 'Gate pass marked as exited.',
-            'data' => TransactionPresenter::gatePassDocument($outslip, $gatePass->fresh()),
+            'data' => $document,
+        ]);
+    }
+
+    private function assertGatePassEditable(GatePass $gatePass): void
+    {
+        if (strtoupper((string) $gatePass->status) === 'EXITED') {
+            throw ValidationException::withMessages([
+                'gatePass' => 'This gate pass can no longer be edited.',
+            ]);
+        }
+    }
+
+    private function outslipInventoryAlreadyPosted(Outslip $outslip): bool
+    {
+        return InventoryMovement::query()
+            ->where('trans_type', 'OUTSLIP')
+            ->where('trans_id', $outslip->id)
+            ->exists();
+    }
+
+    private function findOutslipForUpdate(string $id): Outslip
+    {
+        $query = Outslip::query()->with(['details', 'gatePass']);
+
+        if (is_numeric($id)) {
+            return $query->lockForUpdate()->findOrFail((int) $id);
+        }
+
+        return $query->where('outslip_no', $id)->lockForUpdate()->firstOrFail();
+    }
+
+    private function findOrCreateGatePassForUpdate(Outslip $outslip): GatePass
+    {
+        $existing = GatePass::query()
+            ->where('outslip_id', $outslip->id)
+            ->lockForUpdate()
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $latest = GatePass::query()->orderByDesc('id')->value('gate_pass_no');
+
+        return GatePass::query()->create([
+            'outslip_id' => $outslip->id,
+            'gate_pass_no' => DocumentNumber::next('GP-', $latest),
+            'status' => 'PENDING',
         ]);
     }
 

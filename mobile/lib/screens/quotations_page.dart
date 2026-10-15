@@ -146,6 +146,7 @@ class _QuotationsPageState extends State<QuotationsPage> {
           MobileModule.purchaseOrders,
           created,
           popCurrentRoute: popCurrentRoute,
+          offline: _fromCache,
         );
       }
     } finally {
@@ -214,7 +215,13 @@ class _QuotationsPageState extends State<QuotationsPage> {
             ],
             onChanged: (value) => setState(() => _filter = value),
           ),
-          if (_fromCache && _offlineLabel != null) FieldOfflineBanner(label: _offlineLabel!),
+          if (_fromCache && _offlineLabel != null)
+            FieldOfflineBanner(
+              label: _offlineLabel!,
+              hint: OfflineCache.offlineReconnectHint,
+            ),
+          if (!_lists.crossModuleRulesReliable && !_loading)
+            const FieldPartialCacheBanner(),
           if (_error != null && !_fromCache) FieldErrorBanner(message: _error!, onRetry: _load),
           if (visible.isEmpty && (_error == null || _fromCache))
             FieldEmptyState(
@@ -313,6 +320,7 @@ class QuotationDetailPage extends StatelessWidget {
     this.onEdit,
     this.workflowNotice,
     this.workflowNoticeLoading = false,
+    this.offline = false,
   });
 
   final ApiClient api;
@@ -324,6 +332,7 @@ class QuotationDetailPage extends StatelessWidget {
   final Future<void> Function()? onEdit;
   final String? workflowNotice;
   final bool workflowNoticeLoading;
+  final bool offline;
 
   @override
   Widget build(BuildContext context) {
@@ -348,6 +357,7 @@ class QuotationDetailPage extends StatelessWidget {
         PrintDocumentButton(
           onPrint: () => printQuotation(context, api, quotation),
           label: 'Print PDF',
+          enabled: !offline,
         ),
       ],
       primaryActions: [

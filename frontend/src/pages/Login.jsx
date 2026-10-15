@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
 import { Eye, EyeOff, FileText, Package, ShoppingCart, Truck } from 'lucide-react'
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 const quickModules = [
@@ -32,13 +32,13 @@ function LoginForm({
     : 'mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-secondary'
   const inputClass = isMobile
     ? 'login-field h-12 rounded-xl border border-white/10 bg-white px-4 text-text-primary placeholder:text-text-secondary/70'
-    : 'login-field h-11 rounded-xl border-transparent bg-white px-4 lg:bg-maroon-light/40'
+    : 'login-field h-12 rounded-xl border-0 bg-[#f3ecec] px-4 text-text-primary placeholder:text-text-secondary focus:bg-[#efe6e6] focus:ring-2 focus:ring-maroon/25'
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
         <label htmlFor={`username-${variant}`} className={labelClass}>
-          Username
+          Username or email
         </label>
         <Input
           id={`username-${variant}`}
@@ -47,7 +47,7 @@ function LoginForm({
           value={username}
           onChange={(event) => onUsernameChange(event.target.value)}
           className={inputClass}
-          placeholder="admin"
+          placeholder="admin or admin@responsivcode.com"
           required
           disabled={isSubmitting}
         />
@@ -122,11 +122,16 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const from = location.state?.from ?? '/'
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.classList.add('login-route')
+    return () => document.documentElement.classList.remove('login-route')
+  }, [])
 
   if (isBootstrapping) {
     return (

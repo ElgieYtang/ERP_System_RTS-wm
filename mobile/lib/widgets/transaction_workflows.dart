@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../navigation/mobile_modules.dart';
+import '../navigation/module_navigation_scope.dart';
 import '../navigation/transaction_navigation.dart';
 import '../services/api_client.dart';
 import '../services/api_errors.dart';
@@ -273,8 +275,24 @@ Future<Map<String, dynamic>?> confirmCreateDeliveryReceipt(
   try {
     final response = await api.post('/delivery-receipts', {'outslipId': outslipId});
     if (context.mounted) {
+      final drId = recordFromPayload(response)?['id']?.toString();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Delivery receipt created.')),
+        SnackBar(
+          content: Text(
+            drId != null && drId.isNotEmpty
+                ? 'Delivery receipt $drId created.'
+                : 'Delivery receipt created.',
+          ),
+          action: SnackBarAction(
+            label: 'Deliveries',
+            onPressed: () {
+              final scope = ModuleNavigationScope.maybeOf(context);
+              if (scope != null) {
+                scope.onOpenModule(context, MobileModule.deliveries);
+              }
+            },
+          ),
+        ),
       );
     }
     return recordFromPayload(response);
@@ -483,6 +501,54 @@ Future<Map<String, dynamic>?> dispatchOutslip(
   }
 }
 
+Future<Map<String, dynamic>?> fetchSetupItemByBarcode(
+  ApiClient api,
+  String barcode,
+) async {
+  final code = barcode.trim();
+  if (code.isEmpty) return null;
+  return api.getData('/setup/items/by-barcode/${Uri.encodeComponent(code)}');
+}
+
+List<Map<String, dynamic>> buildDeliverySerialLines(
+  List<Map<String, dynamic>> items,
+) {
+  return items.map((item) {
+    final productId = int.tryParse(item['productId']?.toString() ?? '');
+    if (productId == null) {
+      throw FormatException('Missing product id on a delivery line.');
+    }
+    final serialNumbers = <String>[];
+    final raw = item['serialNumbers'];
+    if (raw is List) {
+      for (final value in raw) {
+        final text = value.toString().trim();
+        if (text.isNotEmpty) {
+          serialNumbers.add(text);
+        }
+      }
+    }
+    return {
+      'productId': productId,
+      'serialNumbers': serialNumbers,
+    };
+  }).toList();
+}
+
+Future<Map<String, dynamic>?> updateDeliverySerials(
+  ApiClient api,
+  Map<String, dynamic> delivery,
+  List<Map<String, dynamic>> items,
+) async {
+  final id = fieldDbId(delivery);
+  if (id.isEmpty) return null;
+
+  final response = await api.put('/delivery-receipts/$id/serials', {
+    'lines': buildDeliverySerialLines(items),
+  });
+  return recordFromPayload(response);
+}
+
 Future<Map<String, dynamic>?> updateDeliveryStatus(
   BuildContext context,
   ApiClient api,
@@ -490,7 +556,10 @@ Future<Map<String, dynamic>?> updateDeliveryStatus(
   String status,
 ) async {
   if (!canUpdateDeliveryStatus(delivery, status)) {
-    showTransactionActionBlocked(context, 'This delivery cannot move to that status.');
+    final message = status == 'delivered' && deliverySerialsPending(delivery)
+        ? deliverySerialsBlockedMessage()
+        : 'This delivery cannot move to that status.';
+    showTransactionActionBlocked(context, message);
     return null;
   }
 
@@ -539,10 +608,15 @@ Future<Map<String, dynamic>?> recordBillingPayment(
   final id = fieldRowId(billing);
   if (id.isEmpty) return null;
 
-  final total = (billing['total'] as num?)?.toDouble() ?? 0;
-  final paid = (billing['paidAmount'] as num?)?.toDouble() ?? 0;
-  final remaining = (total - paid).clamp(0, double.infinity);
-  final amountController = TextEditingController(text: remaining.toStringAsFixed(2));
+  Map<String, dynamic> snapshot = billing;
+  try {
+    snapshot = await api.getOne('/billings/${Uri.encodeComponent(id)}');
+  } catch (_) {
+    // Use list row if refresh fails (offline).
+  }
+
+  final remaining = fieldBillingBalanceDue(snapshot).toDouble().clamp(0, double.infinity);
+  final amountController = TextEditingController(text: fieldRoundMoney(remaining).toStringAsFixed(2));
   final referenceController = TextEditingController();
   final remarksController = TextEditingController();
 
@@ -580,8 +654,8 @@ Future<Map<String, dynamic>?> recordBillingPayment(
   );
   if (confirmed != true) return null;
 
-  final amount = double.tryParse(amountController.text.trim());
-  if (amount == null || amount <= 0) {
+  final parsed = double.tryParse(amountController.text.trim());
+  if (parsed == null || parsed <= 0) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a valid payment amount.')),
@@ -590,8 +664,22 @@ Future<Map<String, dynamic>?> recordBillingPayment(
     return null;
   }
 
+  var amount = fieldRoundMoney(parsed);
+  if (amount > remaining) {
+    if (amount - remaining <= 0.05) {
+      amount = fieldRoundMoney(remaining);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Amount cannot exceed ${fieldFormatMoney(remaining)}.')),
+      );
+      return null;
+    } else {
+      return null;
+    }
+  }
+
   try {
-    final response = await api.post('/billings/$id/payments', {
+    final response = await api.post('/billings/${Uri.encodeComponent(id)}/payments', {
       'amount': amount,
       'date': DateTime.now().toIso8601String().split('T').first,
       if (referenceController.text.trim().isNotEmpty) 'reference': referenceController.text.trim(),

@@ -9,6 +9,7 @@ import 'package:printing/printing.dart';
 import 'amount_to_words.dart';
 import 'api_client.dart';
 import 'document_pdf_layout.dart';
+import '../widgets/field_ui.dart';
 
 class DocumentPrint {
   DocumentPrint._();
@@ -325,14 +326,17 @@ class DocumentPrint {
     Map<String, dynamic> outslip, {
     Map<String, dynamic>? documentOverride,
   }) async {
-    final detail = await _ensureOutslipDetail(api, outslip);
-    final outslipRef = _documentRef(detail);
     Map<String, dynamic>? document = documentOverride;
 
-    if (document == null && outslipRef.isNotEmpty) {
-      final response = await api.request('GET', '/outslips/$outslipRef/gate-pass');
-      if (response is Map && response['data'] is Map) {
-        document = Map<String, dynamic>.from(response['data'] as Map);
+    if (document == null) {
+      final detail = await _ensureOutslipDetail(api, outslip);
+      final outslipRef = _documentRef(detail);
+
+      if (outslipRef.isNotEmpty) {
+        final response = await api.request('GET', '/outslips/$outslipRef/gate-pass');
+        if (response is Map && response['data'] is Map) {
+          document = Map<String, dynamic>.from(response['data'] as Map);
+        }
       }
     }
 
@@ -340,12 +344,7 @@ class DocumentPrint {
       throw ApiException('Could not load gate pass data. Check your connection and try again.');
     }
 
-    final Map<String, dynamic> doc = documentOverride != null
-        ? {
-            ...document,
-            ...documentOverride,
-          }
-        : document;
+    final Map<String, dynamic> doc = document;
 
     String dash(String? value) {
       final text = value?.trim();
@@ -464,8 +463,8 @@ class DocumentPrint {
   }
 
   static Future<void> shareBilling(Map<String, dynamic> billing) async {
-    final total = (billing['total'] as num?)?.toDouble() ?? 0;
-    final paid = (billing['paidAmount'] as num?)?.toDouble() ?? 0;
+    final total = fieldBillingTotal(billing).toDouble();
+    final paid = fieldBillingPaid(billing).toDouble();
     final balance = (total - paid).clamp(0, double.infinity);
     final bytes = await _buildPdf((logo) => [
           DocumentPdfLayout.letterhead(logo),

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../navigation/app_navigation.dart';
-import '../navigation/mobile_modules.dart';
-import '../navigation/module_navigation_scope.dart';
+import 'app_navigation.dart';
+import 'mobile_modules.dart';
+import 'module_navigation_scope.dart';
 import '../services/api_client.dart';
 
 class ModuleShell extends StatelessWidget {

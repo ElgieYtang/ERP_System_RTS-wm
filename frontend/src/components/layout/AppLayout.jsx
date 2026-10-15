@@ -2,6 +2,7 @@ import { ToastContainer } from '@/components/ui/toast'
 import { useTransactions } from '@/context/TransactionContext'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { BarcodeLookup } from './BarcodeLookup'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 
@@ -51,6 +52,7 @@ function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <BarcodeLookup />
       <ToastContainer />
     </div>
   )

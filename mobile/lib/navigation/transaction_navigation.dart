@@ -23,6 +23,7 @@ Future<void> openCreatedTransaction(
   MobileModule module,
   Map<String, dynamic> record, {
   bool popCurrentRoute = false,
+  bool offline = false,
 }) async {
   if (!context.mounted) return;
   if (popCurrentRoute && Navigator.canPop(context)) {
@@ -30,7 +31,7 @@ Future<void> openCreatedTransaction(
   }
   if (!context.mounted) return;
 
-  await pushTransactionDetail(context, api, module, record);
+  await pushTransactionDetail(context, api, module, record, offline: offline);
 }
 
 Widget buildTransactionDetailPage({
@@ -49,6 +50,7 @@ Widget buildTransactionDetailPage({
   Future<void> Function()? onCreateDr,
   Future<void> Function(String status)? onSetStatus,
   Future<void> Function()? onCreateBilling,
+  ValueChanged<Map<String, dynamic>>? onDeliveryUpdated,
   Future<void> Function()? onRecordPayment,
   Future<void> Function()? onApproveQuotation,
   Future<void> Function()? onConvert,
@@ -64,6 +66,7 @@ Widget buildTransactionDetailPage({
         order: record,
         canReceive: canReceive,
         onReceive: onReceive,
+        offline: offline,
         workflowNotice: workflowNotice,
         workflowNoticeLoading: workflowNoticeLoading,
       );
@@ -97,6 +100,8 @@ Widget buildTransactionDetailPage({
         popAfterMutations: popAfterMutations,
         onSetStatus: onSetStatus,
         onCreateBilling: onCreateBilling,
+        onDeliveryUpdated: onDeliveryUpdated,
+        offline: offline,
         workflowNotice: workflowNotice,
         workflowNoticeLoading: workflowNoticeLoading,
       );
@@ -117,6 +122,7 @@ Widget buildTransactionDetailPage({
         onConvert: onConvert,
         onCancel: onCancel,
         onEdit: onEdit,
+        offline: offline,
         workflowNotice: workflowNotice,
         workflowNoticeLoading: workflowNoticeLoading,
       );

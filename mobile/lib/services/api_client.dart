@@ -23,6 +23,9 @@ class ApiClient {
   static const _tokenKey = 'rc_erp_token';
   static const _userKey = 'rc_erp_user';
 
+  /// Called when the server rejects the session (401). Wire to [AuthState].
+  void Function(String message)? onSessionExpired;
+
   String? _token;
   Map<String, dynamic>? _user;
 
@@ -112,7 +115,7 @@ class ApiClient {
 
   Future<dynamic> _decode(http.Response response) async {
     if (response.statusCode == 401) {
-      await clearSession();
+      await _expireSession();
       throw ApiException('Session expired. Please sign in again.', statusCode: 401);
     }
 
@@ -151,6 +154,12 @@ class ApiClient {
       // Clear local session anyway.
     }
     await clearSession();
+  }
+
+  Future<void> _expireSession() async {
+    const message = 'Session expired. Please sign in again.';
+    await clearSession();
+    onSessionExpired?.call(message);
   }
 
   Future<void> clearSession() async {
@@ -201,7 +210,7 @@ class ApiClient {
     final uri = _uri(path);
     final response = await http.get(uri, headers: _headers(json: false));
     if (response.statusCode == 401) {
-      await clearSession();
+      await _expireSession();
       throw ApiException('Session expired. Please sign in again.', statusCode: 401);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {

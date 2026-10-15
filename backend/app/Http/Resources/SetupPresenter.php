@@ -169,6 +169,7 @@ class SetupPresenter
             'modelId' => (string) $item->model_id,
             'model' => $item->model?->name ?? '',
             'name' => $item->item_name,
+            'barcode' => $item->barcode ?? '',
             'unitId' => (string) ($item->unit_measure_id ?? ''),
             'unit' => $item->unitMeasure?->name ?? '',
             'stock' => $stock,

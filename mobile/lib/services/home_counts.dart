@@ -38,6 +38,25 @@ Map<MobileModule, int> computeHomeModuleCounts({
   };
 }
 
+bool homeModuleCountsDiffer(
+  Map<MobileModule, int> left,
+  Map<MobileModule, int> right,
+) {
+  for (final module in MobileModule.values) {
+    if (module == MobileModule.home) continue;
+    if ((left[module] ?? 0) != (right[module] ?? 0)) return true;
+  }
+  return false;
+}
+
+Map<MobileModule, int> homeModuleCountsFromStats(Map<String, dynamic> stats) {
+  return {
+    for (final module in MobileModule.values)
+      if (module != MobileModule.home)
+        module: (stats[module.name] as num?)?.toInt() ?? 0,
+  };
+}
+
 int _countOpenOutslips(List<dynamic> rows, TransactionLists lists) {
   var count = 0;
   for (final row in rows) {

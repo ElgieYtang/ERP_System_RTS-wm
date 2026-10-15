@@ -77,6 +77,7 @@ export const SETUP_FORM_FIELDS = {
       required: true,
     },
     { key: 'name', label: 'Item Name', required: true, className: 'sm:col-span-2' },
+    { key: 'barcode', label: 'Product Barcode', placeholder: 'Scan or enter barcode' },
     {
       key: 'unitId',
       label: 'Unit of Measure',

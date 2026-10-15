@@ -1,0 +1,1439 @@
+﻿.quotation-page {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+}
+
+.quotation-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 10mm 12mm;
+  box-sizing: border-box;
+  color: #000;
+  background: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.q-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 2.5px solid #000;
+}
+
+.q-logo {
+  width: 16mm;
+  height: 16mm;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.q-company {
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.q-company-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin-bottom: 1px;
+}
+
+.q-title-bar {
+  border-top: 2.5px solid #000;
+  border-bottom: 2.5px solid #000;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  padding: 2.6mm 0;
+  margin: 0 0 3mm;
+}
+
+.q-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+  padding: 0 0 3.5mm;
+  margin-bottom: 3mm;
+}
+
+.q-meta-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.q-meta-right {
+  width: 52mm;
+  flex-shrink: 0;
+}
+
+.q-line {
+  display: grid;
+  grid-template-columns: 30mm 1fr;
+  gap: 2mm;
+  align-items: end;
+  margin-bottom: 2mm;
+  min-height: 14px;
+}
+
+.q-meta-right .q-line {
+  grid-template-columns: 12mm 1fr;
+}
+
+.q-subject-line {
+  grid-template-columns: 18mm 1fr;
+}
+
+.q-label {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.q-value {
+  border-bottom: 1px solid #000;
+  min-height: 14px;
+  padding-bottom: 1px;
+  word-break: break-word;
+}
+
+.q-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10.5px;
+}
+
+.q-table th,
+.q-table td {
+  border: 1px solid #000;
+  padding: 3px 4px;
+  vertical-align: middle;
+  background: #fff;
+}
+
+.q-table th {
+  font-weight: 700;
+  text-align: center;
+  padding: 5px 3px;
+  background: #dcead5;
+}
+
+.q-c { text-align: center; }
+.q-l { text-align: left; }
+.q-r { text-align: right; white-space: nowrap; }
+
+.q-empty td {
+  height: 7mm;
+}
+
+.q-nothing {
+  height: 8mm;
+  text-align: center !important;
+  font-weight: 700;
+}
+
+.q-total {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 8mm;
+  margin-top: 3.5mm;
+  margin-right: 1mm;
+}
+
+.q-total-label {
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.q-total-amount {
+  min-width: 28mm;
+  text-align: right;
+  font-weight: 700;
+  border-top: 2.5px solid #000;
+  padding-top: 2px;
+}
+
+.q-signs {
+  display: flex;
+  justify-content: space-between;
+  gap: 18mm;
+  margin-top: 14mm;
+  padding: 0 1mm;
+}
+
+.q-yours {
+  width: 70mm;
+}
+
+.q-yours-space {
+  height: 12mm;
+}
+
+.q-yours-name {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.q-yours-title {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.q-conforme {
+  width: 72mm;
+}
+
+.q-conforme-title {
+  font-weight: 700;
+  margin-bottom: 8mm;
+}
+
+.q-conforme-name {
+  font-weight: 700;
+  text-transform: uppercase;
+  border-bottom: 1px solid #000;
+  padding-bottom: 2px;
+  min-height: 16px;
+}
+
+.q-conforme-caption {
+  font-size: 9px;
+  margin-top: 2px;
+  color: #222;
+}
+
+.q-yours-date {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 6mm;
+}
+
+.q-date-line {
+  display: inline-block;
+  width: 35mm;
+  border-bottom: 1px solid #000;
+  height: 12px;
+}
+
+.po-page {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+}
+
+.po-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 10mm 12mm;
+  box-sizing: border-box;
+  color: #000;
+  background: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.po-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 2.5px solid #000;
+}
+
+.po-logo {
+  width: 16mm;
+  height: 16mm;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.po-company {
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.po-company-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin-bottom: 1px;
+}
+
+.po-title-bar {
+  border-top: 2.5px solid #000;
+  border-bottom: 2.5px solid #000;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  padding: 2.6mm 0;
+  margin: 0 0 3mm;
+}
+
+.po-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+  padding: 0 0 3mm;
+  margin-bottom: 2.5mm;
+}
+
+.po-meta-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.po-meta-right {
+  width: 52mm;
+  flex-shrink: 0;
+}
+
+.po-line {
+  display: grid;
+  grid-template-columns: 30mm 1fr;
+  gap: 2mm;
+  align-items: end;
+  margin-bottom: 2mm;
+  min-height: 14px;
+}
+
+.po-meta-right .po-line {
+  grid-template-columns: 18mm 1fr;
+}
+
+.po-label {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.po-value {
+  border-bottom: 1px solid #000;
+  min-height: 14px;
+  padding-bottom: 1px;
+  word-break: break-word;
+}
+
+.po-intro {
+  margin: 0 0 3mm;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.po-terms {
+  display: flex;
+  justify-content: space-between;
+  gap: 6mm;
+  margin-bottom: 3.5mm;
+}
+
+.po-term-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.po-term-line {
+  display: grid;
+  grid-template-columns: 34mm 1fr;
+  gap: 2mm;
+  align-items: end;
+  margin-bottom: 2mm;
+  min-height: 14px;
+}
+
+.po-term-label {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.po-term-value {
+  min-height: 14px;
+  border-bottom: 1px solid #000;
+  padding-bottom: 1px;
+  word-break: break-word;
+}
+
+.po-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10.5px;
+}
+
+.po-table th,
+.po-table td {
+  border: 1px solid #000;
+  padding: 3px 4px;
+  vertical-align: middle;
+  background: #fff;
+}
+
+.po-table th {
+  font-weight: 700;
+  text-align: center;
+  padding: 5px 3px;
+  background: #dcead5;
+}
+
+.po-c { text-align: center; }
+.po-l { text-align: left; }
+.po-r { text-align: right; white-space: nowrap; }
+
+.po-empty td {
+  height: 7mm;
+}
+
+.po-nothing {
+  height: 8mm;
+  text-align: center !important;
+  font-weight: 700;
+}
+
+.po-total {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 8mm;
+  margin-top: 3.5mm;
+  margin-right: 1mm;
+}
+
+.po-total-label {
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.po-total-amount {
+  min-width: 28mm;
+  text-align: right;
+  font-weight: 700;
+  border-bottom: 1px solid #000;
+  padding-bottom: 1px;
+}
+
+.po-words {
+  margin-top: 3.5mm;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.po-words-label {
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.po-penalty {
+  margin-top: 3.5mm;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: justify;
+  font-style: italic;
+}
+
+.po-signs {
+  display: flex;
+  justify-content: space-between;
+  gap: 18mm;
+  margin-top: 10mm;
+  padding: 0 1mm;
+}
+
+.po-yours {
+  width: 70mm;
+}
+
+.po-conforme {
+  width: 72mm;
+}
+
+.po-yours-space {
+  height: 12mm;
+}
+
+.po-yours-name,
+.po-yours-title {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.po-conforme-title {
+  font-weight: 700;
+  margin-bottom: 8mm;
+}
+
+.po-conforme-supplier {
+  font-weight: 700;
+  text-transform: uppercase;
+  border-bottom: 1px solid #000;
+  padding-bottom: 2px;
+  min-height: 16px;
+}
+
+.po-conforme-caption {
+  font-size: 9px;
+  margin-top: 2px;
+  color: #222;
+}
+
+.po-yours-date {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 6mm;
+}
+
+.po-date-line {
+  display: inline-block;
+  width: 35mm;
+  border-bottom: 1px solid #000;
+  height: 12px;
+}
+
+.outslip-document {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 10mm 11mm;
+  color: #111;
+  background: #fff;
+  font-family: var(--font-sans);
+}
+
+.outslip-head {
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 2mm;
+}
+
+.outslip-company-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.outslip-logo {
+  width: 18mm;
+  height: 18mm;
+  object-fit: contain;
+}
+
+.outslip-company-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #8b1e3f;
+}
+
+.outslip-company-meta {
+  font-size: 10px;
+  color: #4b5563;
+}
+
+.outslip-barcode-box {
+  margin: 2mm 0 3mm;
+  width: 52mm;
+}
+
+.outslip-barcode-caption {
+  font-size: 9px;
+  color: #6b7280;
+}
+
+.outslip-barcode-svg {
+  margin: 2px 0;
+}
+
+.outslip-barcode-label {
+  margin-top: 1px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.outslip-title {
+  margin: 0 0 3mm;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.outslip-reference-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+  margin-bottom: 2mm;
+  font-size: 10px;
+}
+
+.outslip-reference-left {
+  flex: 1;
+}
+
+.outslip-reference-label {
+  font-weight: 700;
+}
+
+.outslip-reference-value--strong {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.outslip-reference-right {
+  width: 65mm;
+}
+
+.outslip-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.outslip-reference-band {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 2mm;
+  padding: 3px 6px;
+  font-size: 10px;
+  background: #edf6f9;
+}
+
+.outslip-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  margin-bottom: 2mm;
+}
+
+.outslip-items-table th,
+.outslip-items-table td {
+  border: 1px solid #374151;
+  padding: 3px 4px;
+  vertical-align: top;
+}
+
+.outslip-items-table th {
+  background: #eef2f7;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.outslip-section-header {
+  text-align: left;
+  font-size: 10px;
+}
+
+.outslip-item-code {
+  font-size: 8.5px;
+  color: #6b7280;
+}
+
+.outslip-totals {
+  width: 65mm;
+  margin-left: auto;
+  font-size: 10px;
+}
+
+.outslip-total-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.outslip-total-row--grand {
+  border-top: 1px solid #111;
+  margin-top: 2px;
+  padding-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.outslip-nothing-follows {
+  font-weight: 700;
+  font-style: italic;
+  text-align: left;
+}
+
+.outslip-acknowledge {
+  margin-top: 3mm;
+  margin-bottom: 2mm;
+  font-size: 9px;
+  font-style: italic;
+}
+
+.outslip-remarks {
+  margin-top: 2mm;
+  min-height: 13mm;
+  border: 1px solid #374151;
+  padding: 4px 6px;
+  font-size: 10px;
+}
+
+.outslip-section-title {
+  margin-bottom: 2mm;
+  font-weight: 700;
+}
+
+.outslip-signatures {
+  margin-top: 5mm;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6mm 10mm;
+}
+
+.outslip-signature-label {
+  font-size: 10px;
+  font-weight: 700;
+  margin-bottom: 7mm;
+}
+
+.outslip-signature-line {
+  border-bottom: 1px solid #111;
+  margin-bottom: 4px;
+}
+
+.outslip-signature-name {
+  font-size: 9px;
+}
+
+.outslip-letter {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 18mm 22mm 20mm;
+  box-sizing: border-box;
+  color: #222;
+  background: #fff;
+  font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.outslip-letter-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.outslip-letter-logo {
+  width: 16mm;
+  height: 16mm;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.outslip-letter-company-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.outslip-letter-company-lead {
+  color: #4b5563;
+}
+
+.outslip-letter-company-rest {
+  color: #b42318;
+}
+
+.outslip-letter-company-meta {
+  margin-top: 1px;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.outslip-letter-date {
+  margin-top: 14mm;
+  text-align: right;
+  font-size: 14px;
+}
+
+.outslip-letter-salutation {
+  margin: 8mm 0 4mm;
+}
+
+.outslip-letter-body {
+  margin: 0 0 5mm;
+}
+
+.outslip-letter-items {
+  margin: 0 0 10mm 2mm;
+  padding: 0;
+  list-style: none;
+}
+
+.outslip-letter-items li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 2mm;
+}
+
+.outslip-letter-check {
+  width: 11px;
+  height: 11px;
+  margin-top: 4px;
+  flex-shrink: 0;
+  border: 1px solid #222;
+  background: #fff;
+}
+
+.outslip-letter-thanks {
+  margin: 0 0 10mm;
+}
+
+.outslip-letter-signatory-name {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.dr-print-root {
+  display: none;
+  pointer-events: none;
+}
+
+.soa-print-root {
+  display: none;
+  pointer-events: none;
+}
+
+.item-barcode-print-root {
+  display: none;
+  pointer-events: none;
+}
+
+.item-barcode-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: auto;
+  background: #fff;
+  padding: 16px 16px 24px;
+}
+
+.item-barcode-preview .item-barcode-print-root {
+  display: block;
+  pointer-events: auto;
+}
+
+.item-barcode-preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.transaction-barcode {
+  display: flex;
+  justify-content: flex-end;
+  line-height: 0;
+}
+
+.transaction-barcode svg {
+  max-width: 52mm;
+  height: auto;
+}
+
+.item-barcode-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 10mm 12mm;
+  box-sizing: border-box;
+  background: #fff;
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.item-barcode-sheet-title {
+  margin: 0 0 6mm;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.item-barcode-empty {
+  text-align: center;
+  font-size: 12px;
+}
+
+.item-barcode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6mm;
+}
+
+.item-barcode-label {
+  border: 1px solid #000;
+  padding: 4mm 3mm;
+  text-align: center;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.item-barcode-name {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.item-barcode-code {
+  margin: 1mm 0 2mm;
+  font-size: 10px;
+}
+
+.item-barcode-graphic svg {
+  max-width: 100%;
+  height: auto;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.soa-document {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 12mm 14mm 10mm;
+  box-sizing: border-box;
+  background: #fff;
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.soa-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 6mm;
+}
+
+.soa-logo {
+  width: 16mm;
+  height: 16mm;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.soa-company {
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.soa-company-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 1px;
+}
+
+.soa-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0 0 6mm;
+}
+
+.soa-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10mm;
+  margin-bottom: 4mm;
+}
+
+.soa-bill-to {
+  flex: 1;
+  min-width: 0;
+}
+
+.soa-bill-label {
+  font-weight: 700;
+}
+
+.soa-customer-name {
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-top: 1mm;
+}
+
+.soa-customer-address {
+  margin-top: 1mm;
+}
+
+.soa-thru {
+  margin-top: 2mm;
+}
+
+.soa-right-meta {
+  width: 62mm;
+  flex-shrink: 0;
+}
+
+.soa-meta-line {
+  display: grid;
+  grid-template-columns: 32mm 1fr;
+  gap: 2mm;
+  align-items: end;
+  margin-bottom: 2.5mm;
+}
+
+.soa-meta-value {
+  border-bottom: 1px solid #000;
+  min-height: 14px;
+  text-align: left;
+}
+
+.soa-reference {
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+  margin-bottom: 0;
+  padding: 2mm 3mm;
+  background: #dcead5;
+  font-weight: 700;
+}
+
+.soa-reference-label {
+  flex-shrink: 0;
+}
+
+.soa-reference-value {
+  font-weight: 400;
+  min-height: 14px;
+}
+
+.soa-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10.5px;
+}
+
+.soa-items-table th,
+.soa-items-table td {
+  border: 1px solid #000;
+  padding: 3px 4px;
+  vertical-align: middle;
+  background: #fff;
+}
+
+.soa-items-table th {
+  font-weight: 700;
+  text-align: center;
+  background: #efefef;
+  padding: 5px 3px;
+}
+
+.soa-col-item { width: 10%; }
+.soa-col-qty { width: 8%; }
+.soa-col-unit { width: 10%; }
+.soa-col-desc { width: 42%; }
+.soa-col-price { width: 15%; }
+.soa-col-total { width: 15%; }
+
+.soa-c { text-align: center; }
+.soa-l { text-align: left; }
+.soa-r { text-align: right; white-space: nowrap; }
+
+.soa-empty td {
+  height: 7mm;
+}
+
+.soa-nothing {
+  height: 8mm;
+  text-align: center !important;
+  font-weight: 700;
+}
+
+.soa-total-row td {
+  background: #efefef;
+  font-weight: 700;
+}
+
+.soa-total-label {
+  text-align: right !important;
+  padding-right: 8mm !important;
+}
+
+.soa-total-value {
+  border-bottom: 3px double #000 !important;
+}
+
+.soa-signatures {
+  display: flex;
+  justify-content: space-between;
+  gap: 16mm;
+  margin-top: 12mm;
+  padding: 0 4mm;
+}
+
+.soa-signature {
+  width: 70mm;
+}
+
+.soa-signature-label {
+  margin-bottom: 2mm;
+}
+
+.soa-signature-space {
+  height: 14mm;
+}
+
+.soa-signature-line {
+  border-bottom: 1px solid #000;
+  margin: 14mm 0 2mm;
+}
+
+.soa-signature-name {
+  font-weight: 700;
+}
+
+.soa-signature-role {
+  font-size: 10px;
+}
+
+.soa-thanks {
+  margin-top: 10mm;
+  text-align: center;
+  font-style: italic;
+}
+
+.dr-document {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 12mm 14mm;
+  box-sizing: border-box;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.dr-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4mm;
+}
+
+.dr-logo {
+  width: 16mm;
+  height: 16mm;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.dr-company {
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.dr-company-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 1px;
+}
+
+.dr-company-meta {
+  font-size: 10px;
+}
+
+.dr-title {
+  border-top: 1px solid #000;
+  border-bottom: 1px solid #000;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  padding: 2.6mm 0;
+  margin: 0 0 4mm;
+}
+
+.dr-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+  margin-bottom: 3mm;
+}
+
+.dr-delivered-to {
+  flex: 1;
+}
+
+.dr-label {
+  font-weight: 700;
+}
+
+.dr-customer-name {
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-top: 1mm;
+}
+
+.dr-customer-address {
+  margin-top: 1mm;
+}
+
+.dr-right-meta {
+  width: 55mm;
+  flex-shrink: 0;
+}
+
+.dr-meta-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 4mm;
+  margin-bottom: 1.5mm;
+}
+
+.dr-reference {
+  display: flex;
+  gap: 3mm;
+  margin-bottom: 4mm;
+  padding-bottom: 2mm;
+  border-bottom: 1px solid #000;
+}
+
+.dr-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10.5px;
+}
+
+.dr-items-table th,
+.dr-items-table td {
+  border: 1px solid #000;
+  padding: 3px 4px;
+  vertical-align: top;
+}
+
+.dr-items-table th {
+  font-weight: 700;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.dr-col-no { width: 5%; text-align: center; }
+.dr-col-desc { width: 22%; text-align: left; }
+.dr-col-brand { width: 26%; text-align: center; }
+.dr-col-qty { width: 6%; text-align: center; }
+.dr-col-unit { width: 8%; text-align: center; }
+.dr-col-price { width: 14%; text-align: right; }
+.dr-col-total { width: 19%; text-align: right; }
+
+.dr-empty-row td {
+  height: 7mm;
+}
+
+.dr-table-total-row td {
+  border: 1px solid #000;
+  vertical-align: middle;
+}
+
+.dr-table-total-row td:first-child {
+  border-left: 1px solid #000;
+}
+
+.dr-table-total-label {
+  text-align: right !important;
+  font-weight: 700;
+  padding-right: 6px !important;
+}
+
+.dr-table-total-value {
+  text-align: right !important;
+  font-weight: 700;
+}
+
+.dr-brand-name {
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 1px;
+}
+
+.dr-brand-serials {
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.dr-nothing-follows {
+  text-align: center !important;
+  font-weight: 700;
+  height: 8mm;
+}
+
+.dr-total-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4mm;
+}
+
+.dr-total-box {
+  display: flex;
+  align-items: baseline;
+  gap: 8mm;
+  min-width: 60mm;
+}
+
+.dr-total-label {
+  font-weight: 700;
+}
+
+.dr-total-value {
+  font-weight: 700;
+  border-bottom: 3px double #000;
+  min-width: 28mm;
+  text-align: right;
+}
+
+.dr-acknowledge {
+  margin-top: 5mm;
+  font-size: 10px;
+  text-align: justify;
+}
+
+.dr-signatures {
+  display: flex;
+  justify-content: space-between;
+  gap: 16mm;
+  margin-top: 10mm;
+}
+
+.dr-signature {
+  width: 70mm;
+}
+
+.dr-signature-label {
+  font-weight: 700;
+  margin-bottom: 12mm;
+}
+
+.dr-signature-line {
+  border-bottom: 1px solid #000;
+  margin-bottom: 2mm;
+}
+
+.dr-signature-name {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dr-signature-role {
+  font-size: 10px;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body,
+  #root {
+    background: #fff !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .report-print-root,
+  .report-print-root *,
+  .quotation-print-root,
+  .quotation-print-root *,
+  .po-print-root,
+  .po-print-root *,
+  .dr-print-root,
+  .dr-print-root *,
+  .outslip-print-root,
+  .outslip-print-root *,
+  .receiving-print-root,
+  .receiving-print-root *,
+  .gatepass-print-root,
+  .gatepass-print-root *,
+  .soa-print-root,
+  .soa-print-root *,
+  .item-barcode-print-root,
+  .item-barcode-print-root * {
+    visibility: visible;
+  }
+
+  .report-print-root,
+  .quotation-print-root,
+  .po-print-root,
+  .dr-print-root,
+  .outslip-print-root,
+  .receiving-print-root,
+  .gatepass-print-root,
+  .soa-print-root,
+  .item-barcode-print-root {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /* Stay in normal flow so a multi-page report does not leave a blank sheet. */
+  .report-print-root {
+    position: static;
+    left: auto;
+    top: auto;
+  }
+
+  .item-barcode-preview {
+    position: static;
+    inset: auto;
+    overflow: visible;
+    padding: 0;
+    background: #fff;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .quotation-print-page .quotation-page,
+  .quotation-print-page .po-page,
+  .quotation-print-page .dr-document,
+  .quotation-print-page .outslip-document {
+    visibility: visible;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}

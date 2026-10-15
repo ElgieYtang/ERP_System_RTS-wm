@@ -7,6 +7,7 @@ import '../services/offline_cache.dart';
 import '../services/transaction_actions.dart';
 import '../theme/app_theme.dart';
 import '../widgets/field_ui.dart';
+import '../widgets/print_document_button.dart';
 import '../widgets/transaction_workflows.dart';
 
 class GatePassPage extends StatefulWidget {
@@ -16,6 +17,10 @@ class GatePassPage extends StatefulWidget {
     required this.outslip,
     this.offline = false,
   });
+
+  /// Shown when gate pass was never loaded while online.
+  static const offlineLoadMessage =
+      'Connect to the internet to load this gate pass for the first time.';
 
   final ApiClient api;
   final Map<String, dynamic> outslip;
@@ -33,6 +38,7 @@ class _GatePassPageState extends State<GatePassPage> {
   String? _loadError;
   String? _offlineLabel;
   Map<String, dynamic>? _document;
+  Map<String, dynamic>? _savedFormSnapshot;
 
   final _destinationController = TextEditingController();
   final _driverController = TextEditingController();
@@ -92,25 +98,98 @@ class _GatePassPageState extends State<GatePassPage> {
   bool get _canMarkExited =>
       _document != null && canMarkGatePassExited(_document!, offline: widget.offline);
 
+  bool get _hasUnsavedChanges {
+    if (!_canEdit || _savedFormSnapshot == null) return false;
+    final current = _formPayload();
+    for (final entry in _savedFormSnapshot!.entries) {
+      if (current[entry.key] != entry.value) return true;
+    }
+    return false;
+  }
+
+  Future<bool> _confirmDiscardChanges() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard unsaved changes?'),
+        content: const Text('Your gate pass edits have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    return discard ?? false;
+  }
+
+  Future<bool> _onWillPop() async {
+    if (!_hasUnsavedChanges) return true;
+    return _confirmDiscardChanges();
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _loadError = null;
     });
+
+    final ref = fieldDbId(widget.outslip);
+
+    if (widget.offline && ref.isNotEmpty) {
+      final cached = await OfflineCache.loadGatePass(ref);
+      if (cached.data != null && mounted) {
+        setState(() {
+          _applyDocument(cached.data!);
+          _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
+        });
+        setState(() => _loading = false);
+        return;
+      }
+    }
+
     try {
       final document = await fetchGatePassDocument(widget.api, widget.outslip);
+      if (ref.isNotEmpty) {
+        await OfflineCache.saveGatePass(ref, document);
+      }
       if (!mounted) return;
       setState(() => _applyDocument(document));
     } catch (error) {
+      if (ref.isNotEmpty) {
+        final cached = await OfflineCache.loadGatePass(ref);
+        if (cached.data != null && mounted) {
+          setState(() {
+            _applyDocument(cached.data!);
+            if (widget.offline) {
+              _offlineLabel = OfflineCache.staleLabel(cached.savedAt);
+            }
+          });
+          return;
+        }
+      }
       if (mounted) {
         setState(() {
           _document = null;
-          _loadError = friendlyApiError(error);
+          _loadError = widget.offline
+              ? GatePassPage.offlineLoadMessage
+              : friendlyApiError(error);
         });
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _persistDocumentCache(Map<String, dynamic> document) async {
+    final ref = fieldDbId(widget.outslip);
+    if (ref.isEmpty) return;
+    await OfflineCache.saveGatePass(ref, document);
   }
 
   void _applyDocument(Map<String, dynamic> document) {
@@ -120,6 +199,8 @@ class _GatePassPageState extends State<GatePassPage> {
     _plateController.text = document['plateNo']?.toString() ?? '';
     _vehicleController.text = document['vehicleNo']?.toString() ?? '';
     _remarksController.text = document['remarks']?.toString() ?? '';
+    _savedFormSnapshot = _formPayload();
+    _persistDocumentCache(document);
   }
 
   Future<void> _save() async {
@@ -250,7 +331,11 @@ class _GatePassPageState extends State<GatePassPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.offline) FieldOfflineBanner(label: _offlineBannerLabel),
+            if (widget.offline)
+            FieldOfflineBanner(
+              label: _offlineBannerLabel,
+              hint: OfflineCache.offlineReconnectHint,
+            ),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(
@@ -406,6 +491,9 @@ class _GatePassPageState extends State<GatePassPage> {
     final canPrint = _document != null;
     final canSave = _canEdit;
     final canExit = _canMarkExited;
+    final printTooltip = widget.offline && _document == null
+        ? GatePassPage.offlineLoadMessage
+        : printRequiresConnectionMessage;
 
     return SafeArea(
       child: Container(
@@ -419,11 +507,20 @@ class _GatePassPageState extends State<GatePassPage> {
           children: [
             SizedBox(
               width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _busy || !canPrint ? null : _print,
-                icon: const Icon(Icons.print_outlined),
-                label: Text(_busy ? 'Working…' : 'Print gate pass'),
-              ),
+              child: canPrint
+                  ? FilledButton.icon(
+                      onPressed: _busy ? null : _print,
+                      icon: const Icon(Icons.print_outlined),
+                      label: Text(_busy ? 'Working…' : 'Print gate pass'),
+                    )
+                  : Tooltip(
+                      message: printTooltip,
+                      child: FilledButton.icon(
+                        onPressed: null,
+                        icon: const Icon(Icons.print_outlined),
+                        label: const Text('Print gate pass'),
+                      ),
+                    ),
             ),
             const SizedBox(height: 8),
             Row(
@@ -452,42 +549,56 @@ class _GatePassPageState extends State<GatePassPage> {
   }
 
   Widget _buildLoadedScaffold(Map<String, dynamic> document, List<Map<String, dynamic>> items) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        resizeToAvoidBottomInset: true,
-        appBar: transactionAppBar(
-          context,
-          title: document['gatePassNo']?.toString() ?? 'Gate pass',
-          showBack: true,
-          extraActions: [
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: _loading || _busy ? null : _load,
-              icon: const Icon(Icons.refresh_rounded),
+    return PopScope(
+      canPop: !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop || !_hasUnsavedChanges) return;
+        if (await _confirmDiscardChanges() && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          resizeToAvoidBottomInset: true,
+          appBar: transactionAppBar(
+            context,
+            title: document['gatePassNo']?.toString() ?? 'Gate pass',
+            showBack: true,
+            onBack: () {
+              _onWillPop().then((allow) {
+                if (allow && context.mounted) Navigator.of(context).pop();
+              });
+            },
+            extraActions: [
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: _loading || _busy ? null : _load,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+              IconButton(
+                tooltip: 'Print gate pass',
+                onPressed: _busy || _document == null ? null : _print,
+                icon: const Icon(Icons.print_outlined),
+              ),
+            ],
+            bottom: TabBar(
+              indicatorColor: Colors.white,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              tabs: [
+                const Tab(text: 'Details'),
+                Tab(text: 'Items (${items.length})'),
+              ],
             ),
-            IconButton(
-              tooltip: 'Print gate pass',
-              onPressed: _busy || _document == null ? null : _print,
-              icon: const Icon(Icons.print_outlined),
-            ),
-          ],
-          bottom: TabBar(
-            indicatorColor: Colors.white,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            tabs: [
-              const Tab(text: 'Details'),
-              Tab(text: 'Items (${items.length})'),
+          ),
+          bottomNavigationBar: _buildBottomBar(document),
+          body: TabBarView(
+            children: [
+              _buildDetailsTab(document),
+              _buildItemsTab(items),
             ],
           ),
-        ),
-        bottomNavigationBar: _buildBottomBar(document),
-        body: TabBarView(
-          children: [
-            _buildDetailsTab(document),
-            _buildItemsTab(items),
-          ],
         ),
       ),
     );
@@ -499,17 +610,29 @@ class _GatePassPageState extends State<GatePassPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (widget.offline) FieldOfflineBanner(label: _offlineBannerLabel),
-          FieldErrorBanner(
-            message: _loadError ?? 'Gate pass unavailable.',
-            onRetry: _load,
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
-            label: Text(_loading ? 'Loading…' : 'Try again'),
-          ),
+          if (widget.offline) ...[
+            FieldOfflineBanner(label: _offlineBannerLabel),
+            Card(
+              child: const ListTile(
+                leading: Icon(Icons.info_outline_rounded, color: AppTheme.maroon),
+                title: Text(
+                  GatePassPage.offlineLoadMessage,
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+              ),
+            ),
+          ] else ...[
+            FieldErrorBanner(
+              message: _loadError ?? 'Gate pass unavailable.',
+              onRetry: _load,
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _loading ? null : _load,
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text(_loading ? 'Loading…' : 'Try again'),
+            ),
+          ],
         ],
       ),
     );

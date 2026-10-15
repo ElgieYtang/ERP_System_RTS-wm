@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SetupPresenter;
+use App\Models\SetupItem;
 use App\Support\LegacyPassword;
 use App\Support\SetupStatus;
 use Illuminate\Database\Eloquent\Model;
@@ -77,6 +78,32 @@ class SetupController extends Controller
 
         return response()->json([
             'message' => 'Record deactivated successfully.',
+        ]);
+    }
+
+    public function showItemByBarcode(string $barcode): JsonResponse
+    {
+        $code = trim($barcode);
+        if ($code === '') {
+            return response()->json([
+                'message' => 'Barcode is required.',
+            ], 422);
+        }
+
+        $item = SetupItem::query()
+            ->with(['brand', 'model', 'unitMeasure'])
+            ->whereRaw('LOWER(TRIM(barcode)) = ?', [strtolower($code)])
+            ->where('status', SetupStatus::toDb('Active'))
+            ->first();
+
+        if (! $item) {
+            return response()->json([
+                'message' => 'No item found for this barcode.',
+            ], 404);
+        }
+
+        return response()->json([
+            'data' => SetupPresenter::present('items', $item),
         ]);
     }
 
@@ -187,6 +214,12 @@ class SetupController extends Controller
                 'brandId' => [$isUpdate ? 'sometimes' : 'required', 'integer', Rule::exists('setup_brand', 'id')],
                 'modelId' => [$isUpdate ? 'sometimes' : 'required', 'integer', Rule::exists('setup_model', 'id')],
                 'name' => [$isUpdate ? 'sometimes' : 'required', 'string'],
+                'barcode' => [
+                    'nullable',
+                    'string',
+                    'max:64',
+                    Rule::unique('setup_items', 'barcode')->ignore($record?->id),
+                ],
                 'unitId' => ['nullable', 'integer', Rule::exists('setup_unit_measure', 'id')],
             ],
             'suppliers' => [
@@ -245,6 +278,9 @@ class SetupController extends Controller
                 'brand_id' => isset($payload['brandId']) ? (int) $payload['brandId'] : null,
                 'model_id' => isset($payload['modelId']) ? (int) $payload['modelId'] : null,
                 'item_name' => $payload['name'] ?? null,
+                'barcode' => array_key_exists('barcode', $payload)
+                    ? (($payload['barcode'] ?? '') !== '' ? trim((string) $payload['barcode']) : null)
+                    : null,
                 'unit_measure_id' => isset($payload['unitId']) && $payload['unitId'] !== ''
                     ? (int) $payload['unitId']
                     : null,

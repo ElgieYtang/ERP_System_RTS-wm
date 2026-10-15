@@ -110,6 +110,10 @@ function fetchSettings() {
   return request('/settings')
 }
 
+function fetchHealth() {
+  return request('/health')
+}
+
 function saveSettings(data) {
   return request('/settings', {
     method: 'PUT',
@@ -129,6 +133,7 @@ export {
   AUTH_STORAGE_KEY,
   AUTH_UNAUTHORIZED_EVENT,
   fetchCurrentUser,
+  fetchHealth,
   fetchSettings,
   getAuthToken,
   loginRequest,

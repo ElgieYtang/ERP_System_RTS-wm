@@ -12,7 +12,8 @@ import {
   TableLink,
   TableRow,
 } from '@/components/ui/table'
-import { EmptyState, TableFilters } from '@/components/ui/table-filters'
+import { ReceivingFiltersBar } from '@/components/receiving/ReceivingFiltersBar'
+import { EmptyState } from '@/components/ui/table-filters'
 import { useDemo } from '@/context/DemoContext'
 import { useTransactions } from '@/context/TransactionContext'
 import { filterByDateRange } from '@/lib/dateFilter'
@@ -34,16 +35,18 @@ export function ReceivingPage() {
   const [searchParams] = useSearchParams()
   const poFromUrl = searchParams.get('po')
   const receivingFromUrl = searchParams.get('receiving')
-  const [search, setSearch] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [filters, setFilters] = useState({
+    search: '',
+    dateFrom: '',
+    dateTo: '',
+    status: 'all',
+  })
   const [viewId, setViewId] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const filtered = useMemo(() => {
     let list = receivings
-    const q = search.toLowerCase()
+    const q = filters.search.toLowerCase()
     if (q) {
       list = list.filter(
         (r) =>
@@ -52,12 +55,12 @@ export function ReceivingPage() {
           (r.supplierName ?? '').toLowerCase().includes(q),
       )
     }
-    if (statusFilter !== 'all') {
-      list = list.filter((r) => r.status === statusFilter)
+    if (filters.status !== 'all') {
+      list = list.filter((r) => r.status === filters.status)
     }
-    list = filterByDateRange(list, dateFrom, dateTo, 'date')
+    list = filterByDateRange(list, filters.dateFrom, filters.dateTo, 'date')
     return list
-  }, [receivings, search, statusFilter, dateFrom, dateTo])
+  }, [receivings, filters])
 
   const viewRec = viewId ? receivings.find((r) => r.id === viewId) : null
   const linkedPo = poFromUrl ? purchaseOrders.find((p) => p.id === poFromUrl) : null
@@ -154,22 +157,9 @@ export function ReceivingPage() {
         </div>
       ) : null}
 
-      <TableFilters
-        search={search}
-        onSearchChange={setSearch}
-        statusFilter={statusFilter}
-        onStatusChange={setStatusFilter}
-        statusOptions={[
-          { value: 'pending', label: 'Pending' },
-          { value: 'completed', label: 'Completed' },
-        ]}
-        showDateRange
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onDateFromChange={setDateFrom}
-        onDateToChange={setDateTo}
-      />
+      <ReceivingFiltersBar filters={filters} onChange={setFilters} />
 
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -211,6 +201,7 @@ export function ReceivingPage() {
           )}
         </TableBody>
       </Table>
+      </div>
 
       <Modal open={!!viewRec} onClose={() => setViewId(null)} title="Receiving Details" size="lg">
         {viewRec ? (

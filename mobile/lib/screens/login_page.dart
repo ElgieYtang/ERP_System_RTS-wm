@@ -73,6 +73,20 @@ class _LoginPageState extends State<LoginPage> {
                             fontWeight: FontWeight.w700,
                           ),
                     ),
+                    if (auth.error != null) ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        color: AppTheme.errorBg,
+                        margin: EdgeInsets.zero,
+                        child: ListTile(
+                          leading: const Icon(Icons.lock_clock_outlined, color: AppTheme.errorText),
+                          title: Text(
+                            auth.error!,
+                            style: const TextStyle(color: AppTheme.errorText, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 32),
                     TextFormField(
                       controller: _loginController,

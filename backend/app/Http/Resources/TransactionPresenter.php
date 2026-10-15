@@ -12,6 +12,8 @@ use App\Models\Receiving;
 use App\Models\SetupCustomer;
 use App\Models\SetupItem;
 use App\Models\SetupUser;
+use App\Support\BillingAmounts;
+use App\Support\DeliverySerials;
 
 class TransactionPresenter
 {
@@ -224,6 +226,12 @@ class TransactionPresenter
     {
         $delivery->loadMissing(['details', 'outslip']);
 
+        $itemIds = $delivery->details->pluck('item_id')->filter()->unique()->values();
+        $setupItems = SetupItem::query()
+            ->whereIn('id', $itemIds)
+            ->get()
+            ->keyBy('id');
+
         return [
             'id' => $delivery->dr_no ?: ('DR-'.str_pad((string) $delivery->id, 5, '0', STR_PAD_LEFT)),
             'dbId' => (string) $delivery->id,
@@ -236,24 +244,33 @@ class TransactionPresenter
             'displayDate' => optional($delivery->dr_date)->format('F j, Y'),
             'total' => (float) $delivery->dr_total,
             'status' => self::deliveryStatusToFrontend($delivery->status),
-            'items' => $delivery->details->map(fn ($line) => [
-                'productId' => (string) $line->item_id,
-                'productName' => $line->item_name,
-                'quantity' => (float) $line->qty,
-                'unitPrice' => (float) $line->price,
-                'amount' => (float) $line->amount,
-            ])->values()->all(),
+            'items' => $delivery->details->map(function ($line) use ($setupItems) {
+                $setup = $setupItems->get($line->item_id);
+                $serials = DeliverySerials::decode($line->serial_no);
+
+                return [
+                    'productId' => (string) $line->item_id,
+                    'productName' => $line->item_name,
+                    'barcode' => $setup?->barcode ?? '',
+                    'quantity' => (float) $line->qty,
+                    'unitPrice' => (float) $line->price,
+                    'amount' => (float) $line->amount,
+                    'serialNumbers' => $serials,
+                    'brandSerial' => DeliverySerials::formatForPrint($line->serial_no),
+                ];
+            })->values()->all(),
         ];
     }
 
     public static function billing(Billing $billing): array
     {
-        $billing->loadMissing(['payments', 'delivery']);
+        $billing->loadMissing(['payments', 'delivery.details']);
 
-        $paid = (float) ($billing->paid_amount ?? 0);
-        $total = (float) $billing->billing_total;
+        $total = BillingAmounts::statementTotal($billing);
+        $paid = BillingAmounts::paidTotal($billing);
+        $balanceDue = BillingAmounts::remainingDue($billing);
         $paymentStatus = 'unpaid';
-        if ($paid >= $total && $total > 0) {
+        if ($balanceDue <= 0 && $total > 0) {
             $paymentStatus = 'paid';
         } elseif ($paid > 0) {
             $paymentStatus = 'partially_paid';
@@ -271,6 +288,7 @@ class TransactionPresenter
             'displayDate' => optional($billing->billing_date)->format('F j, Y'),
             'amount' => $total,
             'paidAmount' => $paid,
+            'balanceDue' => $balanceDue,
             'paymentStatus' => $paymentStatus,
             'status' => strtoupper((string) $billing->status) === 'INACTIVE' ? 'inactive' : 'active',
             'payments' => $billing->payments->map(fn ($payment) => [

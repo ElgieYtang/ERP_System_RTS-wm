@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../services/api_client.dart';
 import '../services/api_errors.dart';
@@ -8,6 +9,7 @@ import '../navigation/transaction_detail_host.dart';
 import '../navigation/transaction_navigation.dart';
 import '../services/transaction_actions.dart';
 import '../services/transaction_lists.dart';
+import '../state/auth_state.dart';
 import '../theme/app_theme.dart';
 import 'gate_pass_page.dart';
 import '../widgets/field_ui.dart';
@@ -49,9 +51,11 @@ class _OutslipsPageState extends State<OutslipsPage> {
       case 'dispatch':
         return _rows.where((r) => r['status'] == 'for_dispatch').toList();
       case 'dr_ready':
-        return _rows
-            .where((r) => _lists.crossModuleRulesReliable && canCreateDrFromOutslip(r, _lists))
-            .toList();
+        return _rows.where((r) {
+          if (!isOutslipReadyForDr(r['status']?.toString())) return false;
+          if (!_lists.crossModuleRulesReliable) return true;
+          return !hasDrForOutslip(r, _lists);
+        }).toList();
       default:
         return _rows;
     }
@@ -108,7 +112,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
 
     final id = row['dbId']?.toString() ?? row['id']?.toString();
     if (id == null || _busyId != null) return;
-    if (!canApproveOutslip(row)) return;
+    if (!canApproveOutslipForUser(row, context.read<AuthState>().user)) return;
 
     setState(() => _busyId = id);
     try {
@@ -127,7 +131,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
 
     final id = row['dbId']?.toString() ?? row['id']?.toString();
     if (id == null || _busyId != null) return;
-    if (!canDispatchOutslip(row)) return;
+    if (!canDispatchOutslipForUser(row, context.read<AuthState>().user)) return;
 
     setState(() => _busyId = id);
     try {
@@ -158,6 +162,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
           MobileModule.deliveries,
           created,
           popCurrentRoute: popCurrentRoute,
+          offline: _fromCache,
         );
       }
     } finally {
@@ -182,6 +187,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
           widget.api,
           MobileModule.outslips,
           created,
+          offline: _fromCache,
         );
       }
     } finally {
@@ -196,6 +202,7 @@ class _OutslipsPageState extends State<OutslipsPage> {
     }
 
     final visible = _visible;
+    final authUser = context.watch<AuthState>().user;
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
@@ -219,7 +226,13 @@ class _OutslipsPageState extends State<OutslipsPage> {
             ],
             onChanged: (value) => setState(() => _filter = value),
           ),
-          if (_fromCache && _offlineLabel != null) FieldOfflineBanner(label: _offlineLabel!),
+          if (_fromCache && _offlineLabel != null)
+            FieldOfflineBanner(
+              label: _offlineLabel!,
+              hint: OfflineCache.offlineReconnectHint,
+            ),
+          if (!_lists.crossModuleRulesReliable && !_loading)
+            const FieldPartialCacheBanner(),
           if (_error != null && !_fromCache) FieldErrorBanner(message: _error!, onRetry: _load),
           if (visible.isEmpty && (_error == null || _fromCache))
             FieldEmptyState(
@@ -229,14 +242,20 @@ class _OutslipsPageState extends State<OutslipsPage> {
                   : _filter == 'dr_ready'
                       ? 'No outslips ready for DR'
                       : 'No outslips',
+              subtitle: _filter == 'dr_ready'
+                  ? 'Only dispatched outslips without a delivery receipt appear here. '
+                      'After you tap Create DR, open Deliveries from the home screen to work on the new DR.'
+                  : _filter == 'dispatch'
+                      ? 'Approve an outslip under Needs action, then mark it for dispatch.'
+                      : null,
             ),
           ...visible.map((row) {
             final id = row['dbId']?.toString() ?? row['id']?.toString() ?? '';
             final status = row['status']?.toString() ?? '';
             final itemCount = (row['items'] as List<dynamic>? ?? const []).length;
             final busy = _busyId == id;
-            final showApprove = canApproveOutslip(row);
-            final showDispatch = canDispatchOutslip(row);
+            final showApprove = canApproveOutslipForUser(row, authUser);
+            final showDispatch = canDispatchOutslipForUser(row, authUser);
             final showCreateDr =
                 _lists.crossModuleRulesReliable && canCreateDrFromOutslip(row, _lists);
 
